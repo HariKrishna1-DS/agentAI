@@ -1,0 +1,23 @@
+# Environment variables & API keys
+.env
+*.env
+
+# Virtual environment
+.venv/
+my-agent/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Uploaded documents
+uploads/*
+!uploads/.gitkeep
+
+# IDE / System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
