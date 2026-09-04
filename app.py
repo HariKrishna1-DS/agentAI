@@ -3,15 +3,15 @@ import shutil
 from typing import List, Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
 # Import agent logic
-from agent import run_agent
+from agent import run_agent, SUPPORTED_EXTENSIONS, configure_client, get_client_status
 
 app = FastAPI(
     title="DocuAgent API",
-    description="FastAPI service with Groq Agent for multi-page PDF Question Answering, Document Management, and Cross-Document QC",
+    description="FastAPI service with Gemini/Groq Agent for Multi-Format Document Intelligence (PDF, Word, Text, Images) and QC",
 )
 
 # Enable CORS
@@ -27,6 +27,55 @@ UPLOAD_DIR = "uploads"
 STATIC_DIR = "static"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+
+def get_file_type(filename: str) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == ".pdf":
+        return "pdf"
+    elif ext in [".docx", ".doc"]:
+        return "word"
+    elif ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"]:
+        return "image"
+    else:
+        return "text"
+
+
+def update_env_file(key_name: str, key_val: str, model_val: str = None):
+    """Safely updates or appends keys in the .env file."""
+    env_path = ".env"
+    lines = []
+    found_key = False
+    found_model = False
+
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+    new_lines = []
+    for line in lines:
+        if line.strip().startswith(f"{key_name}="):
+            new_lines.append(f"{key_name}={key_val}\n")
+            found_key = True
+        elif model_val and line.strip().startswith("GEMINI_MODEL="):
+            new_lines.append(f"GEMINI_MODEL={model_val}\n")
+            found_model = True
+        else:
+            new_lines.append(line)
+
+    if not found_key:
+        new_lines.append(f"{key_name}={key_val}\n")
+    if model_val and not found_model:
+        new_lines.append(f"GEMINI_MODEL={model_val}\n")
+
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+
+class ApiKeyConfigRequest(BaseModel):
+    provider: str  # "gemini" or "groq"
+    api_key: str
+    model: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
@@ -45,6 +94,44 @@ class GeneralChatRequest(BaseModel):
     history: Optional[List[ChatMessage]] = None
 
 
+# --- API Key Management Endpoints ---
+
+@app.get("/api-key-status")
+async def api_key_status():
+    """Returns the currently active AI provider, model, and key status."""
+    return get_client_status()
+
+
+@app.post("/set-api-key")
+async def set_api_key(req: ApiKeyConfigRequest):
+    """Updates the active API key and model from the web UI and writes to .env."""
+    key = req.api_key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="API key cannot be empty.")
+
+    prov = req.provider.strip().lower()
+    if prov == "gemini":
+        if key.startswith("gen-lang-client-"):
+            raise HTTPException(
+                status_code=400,
+                detail="'gen-lang-client-...' is a Google Cloud project name, not an API key. Your Gemini API key starts with 'AIzaSy...' or 'AQ.'."
+            )
+        model = req.model.strip() if req.model and req.model.strip() else "gemini-3.6-flash"
+        configure_client(gemini_key=key, model=model)
+        update_env_file("GEMINI_API_KEY", key, model_val=model)
+    elif prov == "groq":
+        model = req.model.strip() if req.model and req.model.strip() else "openai/gpt-oss-20b"
+        configure_client(groq_key=key, model=model)
+        update_env_file("GROQ_API_KEY", key)
+    else:
+        raise HTTPException(status_code=400, detail="Provider must be 'gemini' or 'groq'.")
+
+    return {
+        "message": f"Successfully activated {prov.title()} API Key!",
+        "status": get_client_status(),
+    }
+
+
 # --- Web Page Route ---
 @app.get("/", response_class=HTMLResponse)
 async def serve_webpage():
@@ -59,46 +146,71 @@ async def serve_webpage():
 
 @app.get("/files")
 async def list_files():
-    """Lists all uploaded PDF files with metadata."""
+    """Lists all uploaded files (PDF, Word, Text, Images) with metadata."""
     file_list = []
     if os.path.exists(UPLOAD_DIR):
-        for f in os.listdir(UPLOAD_DIR):
-            if f.lower().endswith(".pdf"):
+        for f in sorted(os.listdir(UPLOAD_DIR)):
+            ext = os.path.splitext(f)[1].lower()
+            if ext in SUPPORTED_EXTENSIONS:
                 full_path = os.path.join(UPLOAD_DIR, f)
                 try:
                     size_kb = round(os.path.getsize(full_path) / 1024, 1)
                 except Exception:
                     size_kb = 0
-                file_list.append({"name": f, "size_kb": size_kb})
+                file_list.append({
+                    "name": f,
+                    "size_kb": size_kb,
+                    "type": get_file_type(f),
+                    "ext": ext,
+                })
     return {"files": file_list}
 
 
+@app.get("/raw-file/{filename}")
+async def get_raw_file(filename: str):
+    """Serves the raw file content or image for previews."""
+    safe_name = os.path.basename(filename)
+    file_path = os.path.join(UPLOAD_DIR, safe_name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File '{safe_name}' not found.")
+    return FileResponse(file_path)
+
+
 @app.post("/upload")
-async def upload_pdfs(files: List[UploadFile] = File(...)):
-    """Uploads one or multiple PDF documents and saves them to uploads/."""
+async def upload_files(files: List[UploadFile] = File(...)):
+    """Uploads one or multiple documents or images and saves them to uploads/."""
     saved_files = []
+    skipped_files = []
+
     for file in files:
-        if file.filename.lower().endswith(".pdf"):
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext in SUPPORTED_EXTENSIONS:
             safe_name = os.path.basename(file.filename)
             file_path = os.path.join(UPLOAD_DIR, safe_name)
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
             saved_files.append(safe_name)
+        else:
+            skipped_files.append(file.filename)
 
     if not saved_files:
-        raise HTTPException(status_code=400, detail="No valid PDF documents provided.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"No supported documents or images provided. Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+        )
 
     return {
         "uploaded": saved_files,
         "count": len(saved_files),
+        "skipped": skipped_files,
         "filename": saved_files[0],
-        "message": f"Successfully uploaded {len(saved_files)} document(s)!",
+        "message": f"Successfully uploaded {len(saved_files)} file(s)!",
     }
 
 
 @app.delete("/files/{filename}")
 async def delete_file(filename: str):
-    """Deletes an uploaded PDF document by filename."""
+    """Deletes an uploaded document or image by filename."""
     safe_name = os.path.basename(filename)
     file_path = os.path.join(UPLOAD_DIR, safe_name)
     if not os.path.exists(file_path):
@@ -107,7 +219,7 @@ async def delete_file(filename: str):
     try:
         os.remove(file_path)
         return {
-            "message": f"Document '{safe_name}' has been deleted.",
+            "message": f"File '{safe_name}' has been deleted.",
             "filename": safe_name,
         }
     except Exception as err:
@@ -119,10 +231,14 @@ async def delete_file(filename: str):
 @app.post("/ask")
 async def ask_document(req: AskDocumentRequest):
     """
-    Asks a question about a specific document, conducts a cross-document QC analysis,
+    Asks a question about a specific document or image, conducts cross-document analysis/QC,
     or answers general questions and greetings naturally.
     """
-    all_files = [f for f in os.listdir(UPLOAD_DIR) if f.lower().endswith(".pdf")] if os.path.exists(UPLOAD_DIR) else []
+    all_files = (
+        [f for f in os.listdir(UPLOAD_DIR) if os.path.splitext(f)[1].lower() in SUPPORTED_EXTENSIONS]
+        if os.path.exists(UPLOAD_DIR)
+        else []
+    )
 
     # Case 1: Explicit General Assistant Mode
     if req.filename == "__general__":
@@ -132,14 +248,15 @@ async def ask_document(req: AskDocumentRequest):
     # Case 2: Cross-Document / QC Mode or Default
     elif not req.filename or req.filename == "__all__":
         if all_files:
+            file_summary = ", ".join(all_files[:8]) + (f" and {len(all_files)-8} more" if len(all_files) > 8 else "")
             prompt = (
-                f"Workspace Context: The user has {len(all_files)} uploaded PDF document(s): {', '.join(all_files)}.\n\n"
-                f"User Message/Question: {req.question}\n\n"
-                "Instructions:\n"
-                "- If the user's message is asking about the uploaded documents, cross-referencing information, or requesting a Quality Control (QC) check, "
-                "use the read_pdf or read_multiple_pdfs tools to inspect the relevant documents and provide an accurate answer.\n"
-                "- If the user's message is a general greeting (e.g. 'hi', 'hello'), a general knowledge query, a math calculation, "
-                "or something unrelated to the documents, answer directly, politely, and conversationally without searching files."
+                f"User Question: {req.question}\n\n"
+                f"[Workspace Context: {len(all_files)} document(s) uploaded ({file_summary})]\n\n"
+                "INSTRUCTIONS:\n"
+                "1. If this is a general knowledge question (e.g. 'what is INA', abbreviations, history, definitions, math, coding, or greetings), "
+                "ANSWER DIRECTLY from your knowledge. DO NOT invoke document tools.\n"
+                "2. If the user explicitly asks about their uploaded documents, files, reports, QC, or discrepancies, "
+                "then inspect the relevant files with the document tools."
             )
             target_name = "All Documents & General Assistant"
         else:
@@ -151,22 +268,25 @@ async def ask_document(req: AskDocumentRequest):
         file_path = os.path.join(UPLOAD_DIR, req.filename)
         if os.path.exists(file_path):
             prompt = (
-                f"The user has selected the document '{req.filename}' located at '{file_path}'.\n\n"
+                f"The user has selected the file '{req.filename}' located at '{file_path}'.\n\n"
                 f"User Question: {req.question}\n\n"
-                "- If this question relates to the document, use the read_pdf tool to answer.\n"
+                "- If this question relates to the document or image, use the read_document or inspect_image tool to answer.\n"
                 "- If this is a general greeting or general question, answer directly."
             )
             target_name = req.filename
         else:
             prompt = (
-                f"Note: The user specified document '{req.filename}', but it is not found on disk.\n"
+                f"Note: The user specified file '{req.filename}', but it is not found on disk.\n"
                 f"User Question: {req.question}\n\n"
                 "Answer the user's question helpfully, and if it specifically required that file, let them know it was not found."
             )
             target_name = "General Assistant"
 
     history_dicts = [m.model_dump() for m in req.history] if req.history else None
-    answer = run_agent(prompt, history=history_dicts)
+    try:
+        answer = run_agent(prompt, history=history_dicts)
+    except Exception as err:
+        answer = f"⚠️ An error occurred while communicating with the AI service:\n\n`{err}`\n\nPlease check your API key and model settings in `.env`."
 
     return {
         "filename": target_name,
@@ -178,9 +298,13 @@ async def ask_document(req: AskDocumentRequest):
 @app.post("/qc-audit")
 async def run_qc_audit():
     """Runs a complete automatic Quality Control (QC) audit across all uploaded files."""
-    all_files = [f for f in os.listdir(UPLOAD_DIR) if f.lower().endswith(".pdf")] if os.path.exists(UPLOAD_DIR) else []
+    all_files = (
+        [f for f in os.listdir(UPLOAD_DIR) if os.path.splitext(f)[1].lower() in SUPPORTED_EXTENSIONS]
+        if os.path.exists(UPLOAD_DIR)
+        else []
+    )
     if not all_files:
-        raise HTTPException(status_code=404, detail="No PDF documents uploaded yet to audit.")
+        raise HTTPException(status_code=404, detail="No documents or images uploaded yet to audit.")
 
     prompt = (
         f"Perform a comprehensive Quality Control (QC) Audit across all {len(all_files)} documents in the order package:\n"
@@ -194,7 +318,11 @@ async def run_qc_audit():
         "6. Final QC Verdict: Conclude with PASS, FAIL, or REVIEW NEEDED, listing any flags clearly."
     )
 
-    answer = run_agent(prompt)
+    try:
+        answer = run_agent(prompt)
+    except Exception as err:
+        answer = f"⚠️ An error occurred while generating the QC audit:\n\n`{err}`"
+
     return {
         "audit_type": "Full Order Package QC Audit",
         "documents_audited": all_files,
@@ -206,7 +334,10 @@ async def run_qc_audit():
 async def general_chat(req: GeneralChatRequest):
     """General conversation with the agent."""
     history_dicts = [m.model_dump() for m in req.history] if req.history else None
-    response = run_agent(req.message, history=history_dicts)
+    try:
+        response = run_agent(req.message, history=history_dicts)
+    except Exception as err:
+        response = f"⚠️ Error: {err}"
     return {"reply": response}
 
 

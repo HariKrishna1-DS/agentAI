@@ -1,7 +1,17 @@
 import ast
+import base64
 import json
 import operator as op
 import os
+import zipfile
+import xml.etree.ElementTree as ET
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+    Image = None
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -9,10 +19,99 @@ from pypdf import PdfReader
 
 load_dotenv()
 
-client = OpenAI(
-    api_key=os.environ["GROQ_API_KEY"],
-    base_url="https://api.groq.com/openai/v1",
-)
+# Client state variables
+client = None
+MODEL_NAME = "None"
+ACTIVE_PROVIDER = "None"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+
+def is_likely_api_key(val: str) -> bool:
+    if not val:
+        return False
+    v = val.strip()
+    return v.startswith(("AQ.", "AIza", "gsk_")) or len(v) > 40
+
+
+def is_valid_gemini_key(val: str) -> bool:
+    if not val:
+        return False
+    v = val.strip()
+    # gen-lang-client- is a Google Cloud project/client ID, NOT an API key
+    if v == "your_gemini_api_key_here" or v.startswith("gen-lang-client-"):
+        return False
+    return len(v) > 20
+
+
+def configure_client(gemini_key: str = None, groq_key: str = None, model: str = None):
+    """Dynamically configures or switches the active LLM client."""
+    global client, MODEL_NAME, ACTIVE_PROVIDER, GEMINI_API_KEY, GROQ_API_KEY
+
+    if gemini_key is not None:
+        GEMINI_API_KEY = gemini_key.strip()
+        os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
+
+    if groq_key is not None:
+        GROQ_API_KEY = groq_key.strip()
+        os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+
+    # Sanitize model name: ensure an API key wasn't accidentally passed as model
+    chosen_model = model if (model and not is_likely_api_key(model)) else None
+    env_gemini_model = os.environ.get("GEMINI_MODEL", "")
+    safe_gemini_model = env_gemini_model if (env_gemini_model and not is_likely_api_key(env_gemini_model)) else "gemini-3.6-flash"
+
+    # Check for valid Gemini API Key first
+    if is_valid_gemini_key(GEMINI_API_KEY):
+        client = OpenAI(
+            api_key=GEMINI_API_KEY,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            timeout=25.0,
+        )
+        MODEL_NAME = chosen_model or safe_gemini_model
+        ACTIVE_PROVIDER = "Gemini"
+    elif GROQ_API_KEY and GROQ_API_KEY.strip():
+        client = OpenAI(
+            api_key=GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+            timeout=25.0,
+        )
+        MODEL_NAME = chosen_model or "openai/gpt-oss-20b"
+        ACTIVE_PROVIDER = "Groq"
+    else:
+        client = None
+        ACTIVE_PROVIDER = "None"
+        MODEL_NAME = "None"
+
+
+def get_client_status():
+    """Returns safe masked status of active client and configured keys."""
+    def mask_key(k):
+        if not k or len(k.strip()) < 8 or k == "your_gemini_api_key_here":
+            return "Not Configured"
+        k = k.strip()
+        return f"{k[:4]}...{k[-4:]}"
+
+    return {
+        "active_provider": ACTIVE_PROVIDER,
+        "active_model": MODEL_NAME,
+        "is_active": client is not None,
+        "gemini_configured": bool(GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here"),
+        "groq_configured": bool(GROQ_API_KEY),
+        "masked_gemini_key": mask_key(GEMINI_API_KEY),
+        "masked_groq_key": mask_key(GROQ_API_KEY),
+    }
+
+
+# Initial setup on module load
+configure_client()
+
+# Supported extensions
+SUPPORTED_EXTENSIONS = {
+    ".pdf", ".docx", ".doc", ".txt", ".md", ".csv", ".tsv",
+    ".json", ".xml", ".html", ".log", ".yaml", ".yml", ".py", ".sql",
+    ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"
+}
 
 # A deliberately restricted calculator.
 # Do not use unrestricted eval() with user input.
@@ -91,34 +190,205 @@ def read_pdf(file_path: str, start_page: int = 1, end_page: int = None) -> str:
         return f"Error reading PDF '{clean_path}': {error}"
 
 
-def list_available_pdfs() -> str:
-    """Discovers all available PDF documents in the uploads directory with page counts."""
+def read_docx(file_path: str) -> str:
+    """Extracts text content, headings, and tables from a Microsoft Word (.docx) document."""
+    clean_path = file_path.strip().strip("'\"")
+    if not os.path.exists(clean_path):
+        alt = os.path.join("uploads", clean_path)
+        if os.path.exists(alt):
+            clean_path = alt
+        else:
+            return f"Error: File not found at '{clean_path}'."
+
+    try:
+        content = ""
+        try:
+            import docx
+            doc = docx.Document(clean_path)
+            text_parts = []
+            for p in doc.paragraphs:
+                if p.text.strip():
+                    text_parts.append(p.text.strip())
+
+            for table in doc.tables:
+                table_lines = []
+                for row in table.rows:
+                    row_cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                    if row_cells:
+                        table_lines.append(" | ".join(row_cells))
+                if table_lines:
+                    text_parts.append("\n".join(table_lines))
+            content = "\n\n".join(text_parts)
+        except ImportError:
+            # Fallback using Python's built-in zipfile + XML (no external packages required)
+            with zipfile.ZipFile(clean_path) as z:
+                xml_content = z.read("word/document.xml")
+            tree = ET.fromstring(xml_content)
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = []
+            for p in tree.iter(f"{{{ns['w']}}}p"):
+                texts = [node.text for node in p.iter(f"{{{ns['w']}}}t") if node.text]
+                if texts:
+                    paragraphs.append("".join(texts))
+            content = "\n\n".join(paragraphs)
+
+        if not content.strip():
+            return f"Word document '{os.path.basename(clean_path)}' contains no readable text content."
+
+        max_chars = 80000
+        if len(content) > max_chars:
+            content = content[:max_chars] + f"\n\n[Note: Output truncated to first {max_chars} characters.]"
+
+        return f"Document: {os.path.basename(clean_path)} (Word Document)\n\n" + content
+    except Exception as error:
+        return f"Error reading Word document '{clean_path}': {error}"
+
+
+def read_text_file(file_path: str) -> str:
+    """Extracts content from plain text, CSV, Markdown, JSON, code, or log files."""
+    clean_path = file_path.strip().strip("'\"")
+    if not os.path.exists(clean_path):
+        alt = os.path.join("uploads", clean_path)
+        if os.path.exists(alt):
+            clean_path = alt
+        else:
+            return f"Error: File not found at '{clean_path}'."
+
+    try:
+        with open(clean_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        if not content.strip():
+            return f"File '{os.path.basename(clean_path)}' is empty."
+
+        max_chars = 80000
+        if len(content) > max_chars:
+            content = content[:max_chars] + f"\n\n[Note: Output truncated to first {max_chars} characters.]"
+
+        return f"Document: {os.path.basename(clean_path)}\n\n" + content
+    except Exception as error:
+        return f"Error reading file '{clean_path}': {error}"
+
+
+def inspect_image(file_path: str, instruction: str = "Analyze and extract all text, data tables, and key visual details from this image.") -> str:
+    """Performs visual inspection and OCR on an image file (.png, .jpg, .jpeg, .webp, .bmp)."""
+    clean_path = file_path.strip().strip("'\"")
+    if not os.path.exists(clean_path):
+        alt = os.path.join("uploads", clean_path)
+        if os.path.exists(alt):
+            clean_path = alt
+        else:
+            return f"Error: Image not found at '{clean_path}'."
+
+    ext = os.path.splitext(clean_path)[1].lower().lstrip(".")
+    img_format = "jpeg" if ext in ("jpg", "jpeg") else (ext if ext else "png")
+    width, height = 0, 0
+
+    if HAS_PIL and Image:
+        try:
+            with Image.open(clean_path) as img:
+                width, height = img.size
+                if img.format:
+                    detected_format = img.format.lower()
+                    img_format = "jpeg" if detected_format in ("jpg", "jpeg") else detected_format
+        except Exception:
+            pass
+
+    try:
+        with open(clean_path, "rb") as f:
+            b64_data = base64.b64encode(f.read()).decode("utf-8")
+
+        mime_type = f"image/{img_format}"
+        res_info = f" (Resolution: {width}x{height})" if width and height else ""
+        vision_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{instruction}\nFilename: {os.path.basename(clean_path)}{res_info}",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{b64_data}",
+                        },
+                    },
+                ],
+            }
+        ]
+        vision_resp = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=vision_messages,
+            temperature=0.2,
+        )
+        analysis = vision_resp.choices[0].message.content or "No content extracted."
+        return f"Image Analysis: {os.path.basename(clean_path)} ({img_format.upper()}):\n\n{analysis}"
+    except Exception as err:
+        return f"Error inspecting image '{clean_path}': {err}"
+
+
+def read_document(file_path: str, start_page: int = 1, end_page: int = None) -> str:
+    """Universal reader: handles PDF, Word (.docx), Text/Data/CSV/JSON/Markdown, and Images (.png, .jpg, .webp)."""
+    clean_path = file_path.strip().strip("'\"")
+    ext = os.path.splitext(clean_path)[1].lower()
+
+    if ext == ".pdf":
+        return read_pdf(clean_path, start_page=start_page, end_page=end_page)
+    elif ext in [".docx", ".doc"]:
+        return read_docx(clean_path)
+    elif ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"]:
+        return inspect_image(clean_path)
+    else:
+        return read_text_file(clean_path)
+
+
+def list_available_documents() -> str:
+    """Discovers all available documents and images in the uploads directory."""
     upload_dir = "uploads"
     if not os.path.exists(upload_dir):
         return "No uploads directory found."
-    files = [f for f in os.listdir(upload_dir) if f.lower().endswith(".pdf")]
+    files = [f for f in os.listdir(upload_dir) if os.path.splitext(f)[1].lower() in SUPPORTED_EXTENSIONS]
     if not files:
-        return "No PDF files available in uploads directory."
+        return "No files available in uploads directory."
 
     info = []
     for f in sorted(files):
         p = os.path.join(upload_dir, f)
+        ext = os.path.splitext(f)[1].lower()
         try:
-            reader = PdfReader(p)
-            info.append(f"- {f} ({len(reader.pages)} pages)")
+            size_kb = round(os.path.getsize(p) / 1024, 1)
+            if ext == ".pdf":
+                info.append(f"- 📕 {f} (PDF, {size_kb} KB)")
+            elif ext in [".docx", ".doc"]:
+                info.append(f"- 📘 {f} (Word Document, {size_kb} KB)")
+            elif ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"]:
+                info.append(f"- 🖼️ {f} (Image, {size_kb} KB)")
+            else:
+                info.append(f"- 📄 {f} (Text/Data, {size_kb} KB)")
         except Exception:
-            info.append(f"- {f} (page count unavailable)")
-    return "Available Documents:\n" + "\n".join(info)
+            info.append(f"- {f}")
+    return "Available Documents & Files:\n" + "\n".join(info)
 
 
-def read_multiple_pdfs(file_paths: list, pages_per_doc: int = 5) -> str:
-    """Reads starting pages from multiple PDF files simultaneously for comparison and QC."""
+def read_multiple_documents(file_paths: list, pages_per_doc: int = 3) -> str:
+    """Reads starting content from multiple files simultaneously for comparison and QC (token-capped)."""
     results = []
-    for path in file_paths:
+    # Cap to at most 6 files at once to stay within token limits
+    safe_paths = file_paths[:6]
+    for path in safe_paths:
         clean = path.strip().strip("'\"")
-        content = read_pdf(clean, start_page=1, end_page=pages_per_doc)
+        content = read_document(clean, start_page=1, end_page=min(pages_per_doc, 3))
+        # Cap each document to 1500 chars for token efficiency
+        if len(content) > 1500:
+            content = content[:1500] + "\n... [Remaining content truncated for token limits] ..."
         results.append(f"=== {os.path.basename(clean)} ===\n{content}")
     return "\n\n" + ("=" * 40) + "\n\n".join(results)
+
+
+# Aliases for seamless backwards compatibility
+list_available_pdfs = list_available_documents
+read_multiple_pdfs = read_multiple_documents
 
 
 tools = [
@@ -142,22 +412,22 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "read_pdf",
-            "description": "Extracts text content from a local PDF file path across all pages or specific page ranges. Use this tool whenever the user wants to read, analyze, summarize, or ask questions about a specific PDF document.",
+            "name": "read_document",
+            "description": "Extracts text content or visual details from any local file: PDF (.pdf), Word (.docx, .doc), Text/Data (.txt, .csv, .md, .json, .log), or Images (.png, .jpg, .webp). Use this whenever analyzing or answering questions about any uploaded file.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "The path to the PDF file (e.g., 'sample.pdf' or 'documents/report.pdf').",
+                        "description": "The path or filename (e.g., 'document.pdf', 'report.docx', 'data.csv', 'receipt.png').",
                     },
                     "start_page": {
                         "type": "integer",
-                        "description": "Optional 1-based start page to read from (defaults to 1).",
+                        "description": "Optional 1-based start page for PDFs (defaults to 1).",
                     },
                     "end_page": {
                         "type": "integer",
-                        "description": "Optional 1-based end page to read up to (defaults to all pages).",
+                        "description": "Optional 1-based end page for PDFs (defaults to all pages).",
                     },
                 },
                 "required": ["file_path"],
@@ -167,8 +437,54 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "list_available_pdfs",
-            "description": "Lists all PDF documents currently uploaded and available in the workspace, along with their page counts. Use this first when performing cross-document analysis or QC audits.",
+            "name": "read_pdf",
+            "description": "Universal document reader (PDF, Word, Text, Image). Alias for read_document.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "The path or filename.",
+                    },
+                    "start_page": {
+                        "type": "integer",
+                        "description": "Optional start page for PDFs.",
+                    },
+                    "end_page": {
+                        "type": "integer",
+                        "description": "Optional end page for PDFs.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_image",
+            "description": "Inspects an image file (.png, .jpg, .jpeg, .webp, .bmp) using vision AI to read diagrams, charts, handwritten text, receipts, tables, or photo contents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "The path to the image file.",
+                    },
+                    "instruction": {
+                        "type": "string",
+                        "description": "Optional question or instruction for the vision inspection.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_available_documents",
+            "description": "Lists all documents, spreadsheets, text files, and images currently uploaded and available in the workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -178,19 +494,52 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "read_multiple_pdfs",
-            "description": "Reads the first few pages of multiple PDF files at once. Essential for fast cross-document comparison and QC audits across files.",
+            "name": "list_available_pdfs",
+            "description": "Lists all uploaded files (PDF, Word, Text, Images). Alias for list_available_documents.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_multiple_documents",
+            "description": "Reads starting content from multiple files (PDFs, Word docs, CSV, Text, Images) simultaneously for fast cross-document comparison and QC audits.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "file_paths": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of PDF filenames or paths to inspect together.",
+                        "description": "List of filenames or paths to inspect together.",
                     },
                     "pages_per_doc": {
                         "type": "integer",
-                        "description": "Number of pages to read from each document (default 5).",
+                        "description": "Number of preview pages/sections per document (default 5).",
+                    },
+                },
+                "required": ["file_paths"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_multiple_pdfs",
+            "description": "Alias for read_multiple_documents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of filenames to inspect together.",
+                    },
+                    "pages_per_doc": {
+                        "type": "integer",
+                        "description": "Number of preview pages/sections per document (default 5).",
                     },
                 },
                 "required": ["file_paths"],
@@ -205,13 +554,14 @@ def run_agent(user_request: str, history: list = None) -> str:
         {
             "role": "system",
             "content": (
-                "You are an intelligent AI Assistant with expert Document Intelligence and Quality Control (QC) capabilities. "
-                "You can answer general questions, solve math calculations, write code, explain concepts, and analyze uploaded PDF documents. "
+                "You are an intelligent AI Assistant with expert Multi-Format Document Intelligence and Quality Control (QC) capabilities. "
+                "You can answer general questions, solve math calculations, write code, explain concepts, and analyze uploaded files in ANY format: "
+                "PDFs (.pdf), Word documents (.docx, .doc), plain text / code / CSV / JSON (.txt, .md, .csv, .json), and images (.png, .jpg, .webp). "
                 "\n"
                 "Guidelines:\n"
                 "1. General Questions & Greetings: If the user asks general knowledge questions, math problems, greetings, or questions not tied to uploaded documents, answer directly, clearly, and helpfully without searching files.\n"
                 "2. Arithmetic: Use the calculate tool whenever arithmetic is needed.\n"
-                "3. Document Analysis & QC: When asked about uploaded documents or Quality Control, verify data across files (order numbers, parties, dates, addresses, amounts), check for discrepancies, and inspect files using read_pdf or read_multiple_pdfs."
+                "3. Document Analysis & QC: When asked about uploaded documents or Quality Control, verify data across files (order numbers, parties, dates, addresses, amounts), check for discrepancies, and inspect files using read_document, inspect_image, or read_multiple_documents."
             ),
         },
     ]
@@ -228,15 +578,44 @@ def run_agent(user_request: str, history: list = None) -> str:
         }
     )
 
+    if client is None:
+        raise ValueError("No active AI API key found. Please enter your Gemini or Groq API key in the API Settings.")
+
+    # Track active LLM engine for this session with fallback support
+    active_client = client
+    active_model = MODEL_NAME
+    active_provider = ACTIVE_PROVIDER
+
     # Allow up to 10 tool iterations for comprehensive multi-document QC.
     for _ in range(10):
-        response = client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.2,
-        )
+        try:
+            response = active_client.chat.completions.create(
+                model=active_model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.2,
+            )
+        except Exception as err:
+            err_str = str(err)
+            # If Gemini encounters an API key or quota issue and Groq is configured, fall back to Groq
+            if active_provider == "Gemini" and GROQ_API_KEY and GROQ_API_KEY.strip():
+                print(f"[Agent Warning] Gemini request failed ({err_str[:80]}). Falling back to Groq...")
+                active_client = OpenAI(
+                    api_key=GROQ_API_KEY,
+                    base_url="https://api.groq.com/openai/v1",
+                )
+                active_model = "openai/gpt-oss-20b"
+                active_provider = "Groq"
+                response = active_client.chat.completions.create(
+                    model=active_model,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=0.2,
+                )
+            else:
+                raise err
 
         message = response.choices[0].message
 
@@ -247,54 +626,45 @@ def run_agent(user_request: str, history: list = None) -> str:
             return message.content or "No response was produced."
 
         for tool_call in message.tool_calls:
-            if tool_call.function.name == "calculate":
-                arguments = json.loads(tool_call.function.arguments)
-                result = calculate(arguments["expression"])
+            fname = tool_call.function.name
+            raw_args = tool_call.function.arguments
+            try:
+                args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except Exception:
+                args = {}
 
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    }
-                )
-            elif tool_call.function.name == "read_pdf":
-                arguments = json.loads(tool_call.function.arguments)
-                result = read_pdf(
-                    arguments["file_path"],
-                    start_page=arguments.get("start_page", 1),
-                    end_page=arguments.get("end_page", None),
-                )
+            print(f"[Agent Tool] Calling '{fname}' with args={args}", flush=True)
 
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    }
+            if fname == "calculate":
+                result = calculate(args.get("expression", ""))
+            elif fname in ("read_document", "read_pdf"):
+                result = read_document(
+                    args.get("file_path", ""),
+                    start_page=args.get("start_page", 1),
+                    end_page=args.get("end_page", None),
                 )
-            elif tool_call.function.name == "list_available_pdfs":
-                result = list_available_pdfs()
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    }
+            elif fname == "inspect_image":
+                result = inspect_image(
+                    args.get("file_path", ""),
+                    instruction=args.get("instruction", "Analyze and extract all text and details from this image."),
                 )
-            elif tool_call.function.name == "read_multiple_pdfs":
-                arguments = json.loads(tool_call.function.arguments)
-                result = read_multiple_pdfs(
-                    arguments["file_paths"],
-                    pages_per_doc=arguments.get("pages_per_doc", 5),
+            elif fname in ("list_available_documents", "list_available_pdfs"):
+                result = list_available_documents()
+            elif fname in ("read_multiple_documents", "read_multiple_pdfs"):
+                result = read_multiple_documents(
+                    args.get("file_paths", []),
+                    pages_per_doc=args.get("pages_per_doc", 5),
                 )
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    }
-                )
+            else:
+                result = f"Unknown tool '{fname}'."
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": str(result),
+                }
+            )
 
     return "The agent reached its tool-call limit while analyzing documents."
 
