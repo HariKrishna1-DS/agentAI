@@ -9,6 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Marked.js for Markdown & Table Rendering -->
+    <script src="/static/marked.min.js"></script>
+    <script>
+        if (typeof marked === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>');
+        }
+    </script>
     <style>
         :root {
             --bg-base: #0a0d14;
@@ -681,6 +688,172 @@
             font-size: 0.85em;
         }
 
+        .msg-bubble h1, .msg-bubble h2, .msg-bubble h3, .msg-bubble h4 {
+            color: #f8fafc;
+            font-weight: 600;
+            margin: 1.1rem 0 0.5rem 0;
+            line-height: 1.35;
+        }
+        .msg-bubble h1 { font-size: 1.25rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.35rem; }
+        .msg-bubble h2 { font-size: 1.12rem; color: #c7d2fe; }
+        .msg-bubble h3 { font-size: 1.02rem; color: #a5b4fc; }
+        .msg-bubble h4 { font-size: 0.95rem; color: #94a3b8; }
+        .msg-bubble hr {
+            border: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 1rem 0;
+        }
+        .msg-bubble blockquote {
+            border-left: 3px solid var(--primary);
+            padding-left: 0.85rem;
+            margin: 0.75rem 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* --- Table Styling & Responsive Container --- */
+        .table-responsive-container {
+            margin: 1.1rem 0;
+            background: rgba(13, 18, 30, 0.95);
+            border: 1px solid rgba(99, 102, 241, 0.28);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            max-width: 100%;
+        }
+
+        .table-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.55rem 0.95rem;
+            background: rgba(20, 28, 45, 0.95);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 0.75rem;
+        }
+
+        .table-tag {
+            font-weight: 600;
+            color: #818cf8;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+        }
+
+        .table-btn-group {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+
+        .btn-table-action {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-secondary);
+            padding: 0.28rem 0.65rem;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-table-action:hover {
+            background: rgba(99, 102, 241, 0.25);
+            border-color: var(--primary);
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .table-scroll-area {
+            overflow-x: auto;
+            max-width: 100%;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(99, 102, 241, 0.45) rgba(10, 13, 20, 0.5);
+        }
+
+        .table-scroll-area::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .table-scroll-area::-webkit-scrollbar-track {
+            background: rgba(10, 13, 20, 0.5);
+        }
+
+        .table-scroll-area::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.45);
+            border-radius: 4px;
+        }
+
+        .table-scroll-area::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        .msg-bubble table {
+            width: 100%;
+            min-width: 620px;
+            border-collapse: collapse;
+            font-size: 0.84rem;
+            text-align: left;
+            line-height: 1.5;
+        }
+
+        .msg-bubble thead {
+            background: linear-gradient(180deg, rgba(28, 38, 60, 0.98), rgba(18, 25, 40, 0.98));
+        }
+
+        .msg-bubble th {
+            padding: 0.85rem 1rem;
+            color: #f1f5f9;
+            font-weight: 600;
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.35);
+            white-space: nowrap;
+        }
+
+        .msg-bubble td {
+            padding: 0.75rem 1rem;
+            color: #cbd5e1;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            vertical-align: top;
+        }
+
+        .msg-bubble tbody tr {
+            transition: background-color 0.15s ease;
+        }
+
+        .msg-bubble tbody tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .msg-bubble tbody tr:hover {
+            background-color: rgba(99, 102, 241, 0.12);
+        }
+
+        .msg-bubble td strong {
+            color: #93c5fd;
+            font-weight: 600;
+        }
+
+        /* Header / column 1 index column styling */
+        .msg-bubble th:first-child,
+        .msg-bubble td:first-child {
+            font-weight: 600;
+            color: #a5b4fc;
+            text-align: center;
+            width: 48px;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
+
         /* Quick Chips */
         .quick-chips {
             display: flex;
@@ -859,7 +1032,10 @@
 
                 <!-- Provider Tabs -->
                 <div class="provider-tabs">
-                    <button type="button" class="tab-btn active" id="tabGemini" onclick="switchProviderTab('gemini')">
+                    <button type="button" class="tab-btn active" id="tabOpenRouter" onclick="switchProviderTab('openrouter')">
+                        <span>🌐 OpenRouter</span>
+                    </button>
+                    <button type="button" class="tab-btn" id="tabGemini" onclick="switchProviderTab('gemini')">
                         <span>✨ Google Gemini</span>
                     </button>
                     <button type="button" class="tab-btn" id="tabGroq" onclick="switchProviderTab('groq')">
@@ -867,8 +1043,39 @@
                     </button>
                 </div>
 
+                <!-- OpenRouter Section -->
+                <div id="sectionOpenRouter" class="provider-section">
+                    <div class="form-group">
+                        <label>OpenRouter API Key</label>
+                        <div style="position: relative;">
+                            <input type="password" id="inputOpenRouterKey" class="form-input" placeholder="Paste your OpenRouter key (sk-or-v1-...)">
+                            <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('inputOpenRouterKey')">👁️</button>
+                        </div>
+                        <span class="input-hint">Configured key: <strong id="hintOpenRouterKey">Loading...</strong></span>
+                    </div>
+                    <div class="form-group">
+                        <label>OpenRouter Model</label>
+                        <select id="selectOpenRouterModel" class="form-input" onchange="handleOpenRouterModelChange(this.value)">
+                            <option value="openai/gpt-4o-mini" selected>openai/gpt-4o-mini (Recommended & Multimodal)</option>
+                            <option value="anthropic/claude-3.5-haiku">anthropic/claude-3.5-haiku</option>
+                            <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct</option>
+                            <option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option>
+                            <option value="deepseek/deepseek-chat">deepseek/deepseek-chat</option>
+                            <option value="mistralai/mistral-small-24b-instruct-2501">mistralai/mistral-small-24b-instruct-2501</option>
+                            <option value="meta-llama/llama-3.2-3b-instruct:free">meta-llama/llama-3.2-3b-instruct:free (Free)</option>
+                            <option value="custom">✏️ Enter Custom Model Name...</option>
+                        </select>
+                        <div id="customModelWrapper" style="display: none; margin-top: 0.5rem;">
+                            <input type="text" id="inputCustomOpenRouterModel" class="form-input" placeholder="e.g. qwen/qwen-2.5-72b-instruct">
+                        </div>
+                    </div>
+                    <button class="btn-save-key" id="btnSaveOpenRouter" onclick="saveApiKey('openrouter')">
+                        <span>Save & Activate OpenRouter</span>
+                    </button>
+                </div>
+
                 <!-- Gemini Section -->
-                <div id="sectionGemini" class="provider-section">
+                <div id="sectionGemini" class="provider-section" style="display: none;">
                     <div class="form-group">
                         <label>Google Gemini API Key</label>
                         <div style="position: relative;">
@@ -1026,14 +1233,20 @@
                 <button class="chip-btn" onclick="triggerFullQCAudit()">
                     <span>🔍</span> Full QC Audit
                 </button>
-                <button class="chip-btn" onclick="useQuickPrompt('Analyze the uploaded document and summarize key findings, figures, and dates.')">
-                    <span>📑</span> Summarize Document
+                <button class="chip-btn" onclick="useQuickPrompt('Extract all deeds into a chronological Deed History table with columns: #, Deed Type, Grantor, Grantee, Official Records Book / Page, Dated, Recorded.')">
+                    <span>📜</span> Deed History Table
+                </button>
+                <button class="chip-btn" onclick="useQuickPrompt('Analyze the uploaded document and summarize key findings, parties, figures, and dates in a structured table.')">
+                    <span>📊</span> Summarize in Table
                 </button>
                 <button class="chip-btn" onclick="useQuickPrompt('Inspect this image in detail and extract all visible text, numbers, labels, and tables.')">
                     <span>🖼️</span> Inspect Image / OCR
                 </button>
                 <button class="chip-btn" onclick="useQuickPrompt('Cross-verify names, dates, amounts, and addresses across all uploaded files. Are there any discrepancies?')">
                     <span>⚖️</span> Check Discrepancies
+                </button>
+                <button class="chip-btn" onclick="useQuickPrompt('Run Python code: calculate the first 15 Fibonacci numbers and print them as a formatted table.')">
+                    <span>🐍</span> Run Python Code
                 </button>
             </div>
 
@@ -1061,24 +1274,192 @@
         let chatHistory = [];
         let uploadedFilesList = [];
 
+        // Configure marked if available
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                gfm: true,
+                breaks: true
+            });
+        }
+
+        function copyTableData(btn) {
+            const container = btn.closest('.table-responsive-container');
+            if (!container) return;
+            const table = container.querySelector('table');
+            if (!table) return;
+
+            let tsv = [];
+            table.querySelectorAll('tr').forEach(row => {
+                let rowData = [];
+                row.querySelectorAll('th, td').forEach(cell => {
+                    let text = cell.innerText.trim().replace(/\t/g, ' ').replace(/\n/g, ' ');
+                    rowData.push(text);
+                });
+                if (rowData.length) tsv.push(rowData.join('\t'));
+            });
+
+            const fullTsv = tsv.join('\n');
+            navigator.clipboard.writeText(fullTsv).then(() => {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                setTimeout(() => { btn.innerHTML = orig; }, 1800);
+            }).catch(err => {
+                console.warn('Clipboard write failed:', err);
+                alert('Copied data preview:\n' + fullTsv.substring(0, 300));
+            });
+        }
+
+        function downloadTableCSV(btn) {
+            const container = btn.closest('.table-responsive-container');
+            if (!container) return;
+            const table = container.querySelector('table');
+            if (!table) return;
+
+            let csv = [];
+            table.querySelectorAll('tr').forEach(row => {
+                let rowData = [];
+                row.querySelectorAll('th, td').forEach(cell => {
+                    let text = cell.innerText.trim().replace(/"/g, '""').replace(/\n/g, ' ');
+                    rowData.push('"' + text + '"');
+                });
+                if (rowData.length) csv.push(rowData.join(','));
+            });
+
+            const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'table-export-' + Date.now() + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function fallbackFormatMarkdown(text) {
+            if (!text) return '';
+            const lines = text.split('\n');
+            let output = [];
+            let inTable = false;
+            let tableRows = [];
+
+            function flushTable() {
+                if (tableRows.length < 2) {
+                    tableRows.forEach(r => output.push('<p>' + r + '</p>'));
+                    tableRows = [];
+                    inTable = false;
+                    return;
+                }
+
+                let html = '<div class="table-responsive-container">' +
+                    '<div class="table-toolbar">' +
+                        '<span class="table-tag">📊 Structured Table</span>' +
+                        '<div class="table-btn-group">' +
+                            '<button type="button" class="btn-table-action" onclick="copyTableData(this)" title="Copy table to clipboard">📋 Copy Table</button>' +
+                            '<button type="button" class="btn-table-action" onclick="downloadTableCSV(this)" title="Download CSV">📥 CSV</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="table-scroll-area"><table>';
+
+                let headerRow = tableRows[0];
+                let hasSeparator = tableRows.length > 1 && /^\|?(\s*:?-+:?\s*\|?)+$/.test(tableRows[1].trim());
+                let bodyStartIndex = hasSeparator ? 2 : 1;
+
+                const headerCells = headerRow.split('|').map(c => c.trim()).filter((c, i, a) => !((i === 0 || i === a.length - 1) && c === ''));
+                html += '<thead><tr>';
+                headerCells.forEach(cell => {
+                    html += '<th>' + inlineFormat(cell) + '</th>';
+                });
+                html += '</tr></thead><tbody>';
+
+                for (let i = bodyStartIndex; i < tableRows.length; i++) {
+                    const rowLine = tableRows[i].trim();
+                    if (!rowLine) continue;
+                    const cells = rowLine.split('|').map(c => c.trim()).filter((c, idx, a) => !((idx === 0 || idx === a.length - 1) && c === ''));
+                    html += '<tr>';
+                    cells.forEach(cell => {
+                        html += '<td>' + inlineFormat(cell) + '</td>';
+                    });
+                    html += '</tr>';
+                }
+
+                html += '</tbody></table></div></div>';
+                output.push(html);
+                tableRows = [];
+                inTable = false;
+            }
+
+            function inlineFormat(str) {
+                return str
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/`([^`]+)`/g, '<code>$1</code>');
+            }
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const isTableLine = line.trim().startsWith('|') && line.trim().endsWith('|');
+
+                if (isTableLine) {
+                    inTable = true;
+                    tableRows.push(line);
+                } else {
+                    if (inTable) flushTable();
+                    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                        output.push('<ul><li>' + inlineFormat(line.replace(/^[-*]\s*/, '')) + '</li></ul>');
+                    } else if (line.trim().startsWith('### ')) {
+                        output.push('<h3>' + inlineFormat(line.substring(4)) + '</h3>');
+                    } else if (line.trim().startsWith('## ')) {
+                        output.push('<h2>' + inlineFormat(line.substring(3)) + '</h2>');
+                    } else if (line.trim().startsWith('# ')) {
+                        output.push('<h1>' + inlineFormat(line.substring(2)) + '</h1>');
+                    } else if (line.trim()) {
+                        output.push('<p>' + inlineFormat(line) + '</p>');
+                    }
+                }
+            }
+            if (inTable) flushTable();
+            return output.join('');
+        }
+
         function formatMarkdown(text) {
             if (!text) return '';
-            let formatted = text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;");
+            
+            // Ensure table blocks have a newline before them so markdown parsers process them cleanly
+            const cleaned = text.replace(/([^\n])\n(\|[^\n]+\|\s*\n\|[-:\s|]+\|)/g, function(match, p1, p2) {
+                return p1 + '\n\n' + p2;
+            });
 
-            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+            if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+                try {
+                    let html = marked.parse(cleaned);
 
-            const paragraphs = formatted.split(/\n\n+/);
-            return paragraphs.map(p => {
-                if (p.trim().startsWith('- ') || p.trim().startsWith('* ')) {
-                    const items = p.split(/\n/).map(line => line.replace(/^[-*]\s*/, '').trim()).filter(Boolean);
-                    return '<ul>' + items.map(li => `<li>${li}</li>`).join('') + '</ul>';
+                    // Wrap any <table> in our responsive glassmorphic table container with export toolbar
+                    html = html.replace(/<table>([\s\S]*?)<\/table>/gi, function(match) {
+                        return '<div class="table-responsive-container">' +
+                            '<div class="table-toolbar">' +
+                                '<span class="table-tag">📊 Structured Table</span>' +
+                                '<div class="table-btn-group">' +
+                                    '<button type="button" class="btn-table-action" onclick="copyTableData(this)" title="Copy table to clipboard">📋 Copy Table</button>' +
+                                    '<button type="button" class="btn-table-action" onclick="downloadTableCSV(this)" title="Download as CSV">📥 CSV</button>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="table-scroll-area">' +
+                                match +
+                            '</div>' +
+                        '</div>';
+                    });
+
+                    return html;
+                } catch (err) {
+                    console.warn('Marked parsing error, falling back to basic parser:', err);
                 }
-                return `<p>${p.replace(/\n/g, '<br>')}</p>`;
-            }).join('');
+            }
+
+            return fallbackFormatMarkdown(cleaned);
         }
 
         const SUPPORTED_EXTS = [
@@ -1381,24 +1762,39 @@
             if (feedback) feedback.style.display = 'none';
         }
 
+        function handleOpenRouterModelChange(val) {
+            const wrapper = document.getElementById('customModelWrapper');
+            if (wrapper) {
+                wrapper.style.display = val === 'custom' ? 'block' : 'none';
+            }
+        }
+
         function switchProviderTab(provider) {
+            const tabOpenRouter = document.getElementById('tabOpenRouter');
             const tabGemini = document.getElementById('tabGemini');
             const tabGroq = document.getElementById('tabGroq');
+            const secOpenRouter = document.getElementById('sectionOpenRouter');
             const secGemini = document.getElementById('sectionGemini');
             const secGroq = document.getElementById('sectionGroq');
             const feedback = document.getElementById('apiKeyFeedback');
             if (feedback) feedback.style.display = 'none';
 
-            if (provider === 'gemini') {
-                tabGemini.classList.add('active');
-                tabGroq.classList.remove('active');
-                secGemini.style.display = 'block';
-                secGroq.style.display = 'none';
-            } else {
-                tabGroq.classList.add('active');
-                tabGemini.classList.remove('active');
-                secGroq.style.display = 'block';
-                secGemini.style.display = 'none';
+            if (tabOpenRouter) tabOpenRouter.classList.remove('active');
+            if (tabGemini) tabGemini.classList.remove('active');
+            if (tabGroq) tabGroq.classList.remove('active');
+            if (secOpenRouter) secOpenRouter.style.display = 'none';
+            if (secGemini) secGemini.style.display = 'none';
+            if (secGroq) secGroq.style.display = 'none';
+
+            if (provider === 'openrouter') {
+                if (tabOpenRouter) tabOpenRouter.classList.add('active');
+                if (secOpenRouter) secOpenRouter.style.display = 'block';
+            } else if (provider === 'gemini') {
+                if (tabGemini) tabGemini.classList.add('active');
+                if (secGemini) secGemini.style.display = 'block';
+            } else if (provider === 'groq') {
+                if (tabGroq) tabGroq.classList.add('active');
+                if (secGroq) secGroq.style.display = 'block';
             }
         }
 
@@ -1416,7 +1812,9 @@
 
                 const pill = document.getElementById('activeModelPill');
                 if (pill) {
-                    if (data.active_provider === 'Gemini') {
+                    if (data.active_provider === 'OpenRouter') {
+                        pill.textContent = '🌐 OpenRouter Active';
+                    } else if (data.active_provider === 'Gemini') {
                         pill.textContent = '✨ Gemini Active';
                     } else if (data.active_provider === 'Groq') {
                         pill.textContent = '⚡ Groq Active';
@@ -1428,13 +1826,24 @@
                 const provBadge = document.getElementById('modalActiveProvider');
                 if (provBadge) {
                     provBadge.textContent = data.active_provider || 'Not Configured';
-                    provBadge.style.color = data.active_provider === 'Gemini' ? '#6ee7b7' : (data.active_provider === 'Groq' ? '#f59e0b' : '#ef4444');
+                    if (data.active_provider === 'OpenRouter') {
+                        provBadge.style.color = '#38bdf8';
+                    } else if (data.active_provider === 'Gemini') {
+                        provBadge.style.color = '#6ee7b7';
+                    } else if (data.active_provider === 'Groq') {
+                        provBadge.style.color = '#f59e0b';
+                    } else {
+                        provBadge.style.color = '#ef4444';
+                    }
                 }
 
                 const modelBadge = document.getElementById('modalActiveModelBadge');
                 if (modelBadge) {
                     modelBadge.textContent = data.active_model || 'None';
                 }
+
+                const hintOpenRouter = document.getElementById('hintOpenRouterKey');
+                if (hintOpenRouter) hintOpenRouter.textContent = data.masked_openrouter_key || 'Not configured';
 
                 const hintGemini = document.getElementById('hintGeminiKey');
                 if (hintGemini) hintGemini.textContent = data.masked_gemini_key || 'Not configured';
@@ -1448,12 +1857,29 @@
 
         async function saveApiKey(provider) {
             const feedback = document.getElementById('apiKeyFeedback');
-            const keyInput = provider === 'gemini' ? document.getElementById('inputGeminiKey') : document.getElementById('inputGroqKey');
-            const modelSelect = provider === 'gemini' ? document.getElementById('selectGeminiModel') : document.getElementById('selectGroqModel');
-            const saveBtn = provider === 'gemini' ? document.getElementById('btnSaveGemini') : document.getElementById('btnSaveGroq');
+            let keyInput, modelSelect, saveBtn, model;
+
+            if (provider === 'openrouter') {
+                keyInput = document.getElementById('inputOpenRouterKey');
+                modelSelect = document.getElementById('selectOpenRouterModel');
+                saveBtn = document.getElementById('btnSaveOpenRouter');
+                const customInput = document.getElementById('inputCustomOpenRouterModel');
+                model = (modelSelect && modelSelect.value === 'custom' && customInput && customInput.value.trim())
+                    ? customInput.value.trim()
+                    : (modelSelect ? modelSelect.value : 'openai/gpt-4o-mini');
+            } else if (provider === 'gemini') {
+                keyInput = document.getElementById('inputGeminiKey');
+                modelSelect = document.getElementById('selectGeminiModel');
+                saveBtn = document.getElementById('btnSaveGemini');
+                model = modelSelect ? modelSelect.value : '';
+            } else {
+                keyInput = document.getElementById('inputGroqKey');
+                modelSelect = document.getElementById('selectGroqModel');
+                saveBtn = document.getElementById('btnSaveGroq');
+                model = modelSelect ? modelSelect.value : '';
+            }
 
             const key = keyInput ? keyInput.value.trim() : '';
-            const model = modelSelect ? modelSelect.value : '';
 
             if (!key) {
                 if (feedback) {

@@ -4,14 +4,15 @@ from typing import List, Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Import agent logic
-from agent import run_agent, SUPPORTED_EXTENSIONS, configure_client, get_client_status
+from agent import run_agent, SUPPORTED_EXTENSIONS, configure_client, get_client_status, run_python_code
 
 app = FastAPI(
     title="DocuAgent API",
-    description="FastAPI service with Gemini/Groq Agent for Multi-Format Document Intelligence (PDF, Word, Text, Images) and QC",
+    description="FastAPI service with OpenRouter / Gemini / Groq Agent for Multi-Format Document Intelligence and Code Execution",
 )
 
 # Enable CORS
@@ -28,6 +29,9 @@ STATIC_DIR = "static"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
+# Mount static files for marked.js and assets
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 def get_file_type(filename: str) -> str:
     ext = os.path.splitext(filename)[1].lower()
@@ -41,12 +45,15 @@ def get_file_type(filename: str) -> str:
         return "text"
 
 
-def update_env_file(key_name: str, key_val: str, model_val: str = None):
+def update_env_file(key_name: str, key_val: str, model_val: str = None, active_provider: str = None):
     """Safely updates or appends keys in the .env file."""
     env_path = ".env"
     lines = []
     found_key = False
+    prefix = key_name.replace("_API_KEY", "")
+    model_key_name = f"{prefix}_MODEL"
     found_model = False
+    found_provider = False
 
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
@@ -54,28 +61,38 @@ def update_env_file(key_name: str, key_val: str, model_val: str = None):
 
     new_lines = []
     for line in lines:
-        if line.strip().startswith(f"{key_name}="):
+        stripped = line.strip()
+        if stripped.startswith(f"{key_name}="):
             new_lines.append(f"{key_name}={key_val}\n")
             found_key = True
-        elif model_val and line.strip().startswith("GEMINI_MODEL="):
-            new_lines.append(f"GEMINI_MODEL={model_val}\n")
+        elif model_val and stripped.startswith(f"{model_key_name}="):
+            new_lines.append(f"{model_key_name}={model_val}\n")
             found_model = True
+        elif active_provider and stripped.startswith("ACTIVE_PROVIDER="):
+            new_lines.append(f"ACTIVE_PROVIDER={active_provider}\n")
+            found_provider = True
         else:
             new_lines.append(line)
 
     if not found_key:
         new_lines.append(f"{key_name}={key_val}\n")
     if model_val and not found_model:
-        new_lines.append(f"GEMINI_MODEL={model_val}\n")
+        new_lines.append(f"{model_key_name}={model_val}\n")
+    if active_provider and not found_provider:
+        new_lines.append(f"ACTIVE_PROVIDER={active_provider}\n")
 
     with open(env_path, "w", encoding="utf-8") as f:
         f.writelines(new_lines)
 
 
 class ApiKeyConfigRequest(BaseModel):
-    provider: str  # "gemini" or "groq"
+    provider: str  # "openrouter", "gemini", or "groq"
     api_key: str
     model: Optional[str] = None
+
+
+class RunCodeRequest(BaseModel):
+    code: str
 
 
 class ChatMessage(BaseModel):
@@ -110,26 +127,39 @@ async def set_api_key(req: ApiKeyConfigRequest):
         raise HTTPException(status_code=400, detail="API key cannot be empty.")
 
     prov = req.provider.strip().lower()
-    if prov == "gemini":
+    if prov == "openrouter":
+        model = req.model.strip() if req.model and req.model.strip() else "openai/gpt-4o-mini"
+        configure_client(provider="openrouter", openrouter_key=key, model=model)
+        update_env_file("OPENROUTER_API_KEY", key, model_val=model, active_provider="OpenRouter")
+    elif prov == "gemini":
         if key.startswith("gen-lang-client-"):
             raise HTTPException(
                 status_code=400,
                 detail="'gen-lang-client-...' is a Google Cloud project name, not an API key. Your Gemini API key starts with 'AIzaSy...' or 'AQ.'."
             )
         model = req.model.strip() if req.model and req.model.strip() else "gemini-3.6-flash"
-        configure_client(gemini_key=key, model=model)
-        update_env_file("GEMINI_API_KEY", key, model_val=model)
+        configure_client(provider="gemini", gemini_key=key, model=model)
+        update_env_file("GEMINI_API_KEY", key, model_val=model, active_provider="Gemini")
     elif prov == "groq":
         model = req.model.strip() if req.model and req.model.strip() else "openai/gpt-oss-20b"
-        configure_client(groq_key=key, model=model)
-        update_env_file("GROQ_API_KEY", key)
+        configure_client(provider="groq", groq_key=key, model=model)
+        update_env_file("GROQ_API_KEY", key, model_val=model, active_provider="Groq")
     else:
-        raise HTTPException(status_code=400, detail="Provider must be 'gemini' or 'groq'.")
+        raise HTTPException(status_code=400, detail="Provider must be 'openrouter', 'gemini', or 'groq'.")
 
     return {
         "message": f"Successfully activated {prov.title()} API Key!",
         "status": get_client_status(),
     }
+
+
+@app.post("/run-code")
+async def run_code_endpoint(req: RunCodeRequest):
+    """Safely executes Python code snippet and returns stdout."""
+    if not req.code or not req.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty.")
+    output = run_python_code(req.code)
+    return {"output": output}
 
 
 # --- Web Page Route ---
@@ -256,7 +286,10 @@ async def ask_document(req: AskDocumentRequest):
                 "1. If this is a general knowledge question (e.g. 'what is INA', abbreviations, history, definitions, math, coding, or greetings), "
                 "ANSWER DIRECTLY from your knowledge. DO NOT invoke document tools.\n"
                 "2. If the user explicitly asks about their uploaded documents, files, reports, QC, or discrepancies, "
-                "then inspect the relevant files with the document tools."
+                "then inspect the relevant files with the document tools.\n"
+                "3. When the user requests a Deed History, Chain of Title, Tax records, Fees, or structured comparisons, "
+                "ALWAYS present the output in a clean, comprehensive Markdown table with standard column headers (e.g. | # | Deed Type | Grantor | Grantee | Book / Page | Dated | Recorded |). "
+                "Ensure there is an empty line before and after the table so it renders properly."
             )
             target_name = "All Documents & General Assistant"
         else:
@@ -271,7 +304,10 @@ async def ask_document(req: AskDocumentRequest):
                 f"The user has selected the file '{req.filename}' located at '{file_path}'.\n\n"
                 f"User Question: {req.question}\n\n"
                 "- If this question relates to the document or image, use the read_document or inspect_image tool to answer.\n"
-                "- If this is a general greeting or general question, answer directly."
+                "- If this is a general greeting or general question, answer directly.\n"
+                "- When the user requests a Deed History, Chain of Title, Tax records, Fees, or structured comparisons, "
+                "ALWAYS present the output in a clean, comprehensive Markdown table with standard column headers (e.g. | # | Deed Type | Grantor | Grantee | Book / Page | Dated | Recorded |). "
+                "Ensure there is an empty line before and after the table so it renders properly."
             )
             target_name = req.filename
         else:

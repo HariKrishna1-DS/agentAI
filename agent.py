@@ -25,13 +25,15 @@ MODEL_NAME = "None"
 ACTIVE_PROVIDER = "None"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+GEMINI_QUOTA_EXHAUSTED = False
 
 
 def is_likely_api_key(val: str) -> bool:
     if not val:
         return False
     v = val.strip()
-    return v.startswith(("AQ.", "AIza", "gsk_")) or len(v) > 40
+    return v.startswith(("AQ.", "AIza", "gsk_", "sk-or-v1-", "sk-")) or len(v) > 35
 
 
 def is_valid_gemini_key(val: str) -> bool:
@@ -44,40 +46,155 @@ def is_valid_gemini_key(val: str) -> bool:
     return len(v) > 20
 
 
-def configure_client(gemini_key: str = None, groq_key: str = None, model: str = None):
-    """Dynamically configures or switches the active LLM client."""
-    global client, MODEL_NAME, ACTIVE_PROVIDER, GEMINI_API_KEY, GROQ_API_KEY
+def switch_to_fallback(reason: str = ""):
+    """Switches active provider to an alternate configured provider when the current one fails."""
+    global client, MODEL_NAME, ACTIVE_PROVIDER, GEMINI_QUOTA_EXHAUSTED
+    current = ACTIVE_PROVIDER
+
+    # If OpenRouter failed (e.g. 402 Insufficient credits)
+    if current == "OpenRouter":
+        if is_valid_gemini_key(GEMINI_API_KEY) and not GEMINI_QUOTA_EXHAUSTED:
+            print(f"[Agent Provider Switch] OpenRouter failed ({reason}). Falling back to Gemini.")
+            client = OpenAI(
+                api_key=GEMINI_API_KEY,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                timeout=25.0,
+            )
+            MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+            ACTIVE_PROVIDER = "Gemini"
+            return client, MODEL_NAME, ACTIVE_PROVIDER
+        elif GROQ_API_KEY and GROQ_API_KEY.strip():
+            print(f"[Agent Provider Switch] OpenRouter failed ({reason}). Falling back to Groq.")
+            client = OpenAI(
+                api_key=GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1",
+                timeout=25.0,
+            )
+            MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+            ACTIVE_PROVIDER = "Groq"
+            return client, MODEL_NAME, ACTIVE_PROVIDER
+
+    # If Gemini failed (quota exceeded)
+    elif current == "Gemini":
+        GEMINI_QUOTA_EXHAUSTED = True
+        if GROQ_API_KEY and GROQ_API_KEY.strip():
+            print(f"[Agent Provider Switch] Gemini failed ({reason}). Falling back to Groq.")
+            client = OpenAI(
+                api_key=GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1",
+                timeout=25.0,
+            )
+            MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+            ACTIVE_PROVIDER = "Groq"
+            return client, MODEL_NAME, ACTIVE_PROVIDER
+
+    return None, None, None
+
+
+def configure_client(
+    gemini_key: str = None,
+    groq_key: str = None,
+    openrouter_key: str = None,
+    model: str = None,
+    provider: str = None,
+):
+    """Dynamically configures or switches the active LLM client among OpenRouter, Gemini, and Groq."""
+    global client, MODEL_NAME, ACTIVE_PROVIDER, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, GEMINI_QUOTA_EXHAUSTED
 
     if gemini_key is not None:
         GEMINI_API_KEY = gemini_key.strip()
         os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
+        GEMINI_QUOTA_EXHAUSTED = False
 
     if groq_key is not None:
         GROQ_API_KEY = groq_key.strip()
         os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
+    if openrouter_key is not None:
+        OPENROUTER_API_KEY = openrouter_key.strip()
+        os.environ["OPENROUTER_API_KEY"] = OPENROUTER_API_KEY
+
+    target_prov = (provider or os.environ.get("ACTIVE_PROVIDER", "")).strip().lower()
+
     # Sanitize model name: ensure an API key wasn't accidentally passed as model
     chosen_model = model if (model and not is_likely_api_key(model)) else None
-    env_gemini_model = os.environ.get("GEMINI_MODEL", "")
-    safe_gemini_model = env_gemini_model if (env_gemini_model and not is_likely_api_key(env_gemini_model)) else "gemini-3.6-flash"
 
-    # Check for valid Gemini API Key first
-    if is_valid_gemini_key(GEMINI_API_KEY):
+    # Priority 1: Explicit target provider selection
+    if target_prov == "openrouter" and OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
+        saved_model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        MODEL_NAME = chosen_model or saved_model
         client = OpenAI(
-            api_key=GEMINI_API_KEY,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            timeout=25.0,
+            api_key=OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "http://127.0.0.1:8000",
+                "X-Title": "DocuAgent AI",
+            },
+            timeout=30.0,
         )
-        MODEL_NAME = chosen_model or safe_gemini_model
-        ACTIVE_PROVIDER = "Gemini"
-    elif GROQ_API_KEY and GROQ_API_KEY.strip():
+        ACTIVE_PROVIDER = "OpenRouter"
+        os.environ["ACTIVE_PROVIDER"] = "OpenRouter"
+        return
+
+    if target_prov == "groq" and GROQ_API_KEY and GROQ_API_KEY.strip():
+        saved_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+        MODEL_NAME = chosen_model or saved_model
         client = OpenAI(
             api_key=GROQ_API_KEY,
             base_url="https://api.groq.com/openai/v1",
             timeout=25.0,
         )
-        MODEL_NAME = chosen_model or "openai/gpt-oss-20b"
         ACTIVE_PROVIDER = "Groq"
+        os.environ["ACTIVE_PROVIDER"] = "Groq"
+        return
+
+    if target_prov == "gemini" and not GEMINI_QUOTA_EXHAUSTED and is_valid_gemini_key(GEMINI_API_KEY):
+        saved_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+        MODEL_NAME = chosen_model or saved_model
+        client = OpenAI(
+            api_key=GEMINI_API_KEY,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            timeout=25.0,
+        )
+        ACTIVE_PROVIDER = "Gemini"
+        os.environ["ACTIVE_PROVIDER"] = "Gemini"
+        return
+
+    # Priority 2: Auto-detect available keys
+    if OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
+        saved_model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        MODEL_NAME = chosen_model or saved_model
+        client = OpenAI(
+            api_key=OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "http://127.0.0.1:8000",
+                "X-Title": "DocuAgent AI",
+            },
+            timeout=30.0,
+        )
+        ACTIVE_PROVIDER = "OpenRouter"
+        os.environ["ACTIVE_PROVIDER"] = "OpenRouter"
+    elif not GEMINI_QUOTA_EXHAUSTED and is_valid_gemini_key(GEMINI_API_KEY):
+        saved_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+        MODEL_NAME = chosen_model or saved_model
+        client = OpenAI(
+            api_key=GEMINI_API_KEY,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            timeout=25.0,
+        )
+        ACTIVE_PROVIDER = "Gemini"
+        os.environ["ACTIVE_PROVIDER"] = "Gemini"
+    elif GROQ_API_KEY and GROQ_API_KEY.strip():
+        saved_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+        MODEL_NAME = chosen_model or saved_model
+        client = OpenAI(
+            api_key=GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+            timeout=25.0,
+        )
+        ACTIVE_PROVIDER = "Groq"
+        os.environ["ACTIVE_PROVIDER"] = "Groq"
     else:
         client = None
         ACTIVE_PROVIDER = "None"
@@ -90,7 +207,7 @@ def get_client_status():
         if not k or len(k.strip()) < 8 or k == "your_gemini_api_key_here":
             return "Not Configured"
         k = k.strip()
-        return f"{k[:4]}...{k[-4:]}"
+        return f"{k[:7]}...{k[-4:]}"
 
     return {
         "active_provider": ACTIVE_PROVIDER,
@@ -98,8 +215,10 @@ def get_client_status():
         "is_active": client is not None,
         "gemini_configured": bool(GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here"),
         "groq_configured": bool(GROQ_API_KEY),
+        "openrouter_configured": bool(OPENROUTER_API_KEY),
         "masked_gemini_key": mask_key(GEMINI_API_KEY),
         "masked_groq_key": mask_key(GROQ_API_KEY),
+        "masked_openrouter_key": mask_key(OPENROUTER_API_KEY),
     }
 
 
@@ -149,6 +268,52 @@ def calculate(expression: str) -> str:
         return str(evaluate(tree.body))
     except Exception as error:
         return f"Calculator error: {error}"
+
+
+def run_python_code(code: str) -> str:
+    """Executes Python code in an isolated environment and captures printed stdout and output."""
+    import sys
+    import io
+    import traceback
+
+    clean_code = code.strip()
+    # Strip markdown code fences if provided
+    if clean_code.startswith("```"):
+        lines = clean_code.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        clean_code = "\n".join(lines).strip()
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    redirected_output = io.StringIO()
+    redirected_error = io.StringIO()
+    sys.stdout = redirected_output
+    sys.stderr = redirected_error
+
+    exec_globals = {
+        "math": __import__("math"),
+        "datetime": __import__("datetime"),
+        "json": __import__("json"),
+        "re": __import__("re"),
+        "os": __import__("os"),
+    }
+
+    try:
+        exec(clean_code, exec_globals)
+        stdout_val = redirected_output.getvalue()
+        stderr_val = redirected_error.getvalue()
+        output = stdout_val
+        if stderr_val:
+            output += f"\n[stderr]\n{stderr_val}"
+        return output.strip() or "Code executed successfully (no printed output)."
+    except Exception:
+        return f"Python Execution Error:\n{traceback.format_exc()}"
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 def read_pdf(file_path: str, start_page: int = 1, end_page: int = None) -> str:
@@ -412,6 +577,23 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "run_python_code",
+            "description": "Executes Python code in an isolated environment and returns printed stdout and output. Use this whenever asked to run code, verify Python logic, perform complex math, data manipulation, or generate data dynamically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Python code snippet to execute. Use print() to output results.",
+                    }
+                },
+                "required": ["code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_document",
             "description": "Extracts text content or visual details from any local file: PDF (.pdf), Word (.docx, .doc), Text/Data (.txt, .csv, .md, .json, .log), or Images (.png, .jpg, .webp). Use this whenever analyzing or answering questions about any uploaded file.",
             "parameters": {
@@ -561,7 +743,8 @@ def run_agent(user_request: str, history: list = None) -> str:
                 "Guidelines:\n"
                 "1. General Questions & Greetings: If the user asks general knowledge questions, math problems, greetings, or questions not tied to uploaded documents, answer directly, clearly, and helpfully without searching files.\n"
                 "2. Arithmetic: Use the calculate tool whenever arithmetic is needed.\n"
-                "3. Document Analysis & QC: When asked about uploaded documents or Quality Control, verify data across files (order numbers, parties, dates, addresses, amounts), check for discrepancies, and inspect files using read_document, inspect_image, or read_multiple_documents."
+                "3. Document Analysis & QC: When asked about uploaded documents or Quality Control, verify data across files (order numbers, parties, dates, addresses, amounts), check for discrepancies, and inspect files using read_document, inspect_image, or read_multiple_documents.\n"
+                "4. Table Presentation: When presenting structured or multi-item records—such as Deed History / Chain of Title (with columns like #, Deed Type, Grantor, Grantee, Book / Page, Dated, Recorded), Tax Information, Fees/Invoices, Party Comparison, or Quality Control Audit checks—ALWAYS format them as a clean Markdown table with headers and row separators. Ensure each table has an empty line before and after it for proper rendering."
             ),
         },
     ]
@@ -579,7 +762,7 @@ def run_agent(user_request: str, history: list = None) -> str:
     )
 
     if client is None:
-        raise ValueError("No active AI API key found. Please enter your Gemini or Groq API key in the API Settings.")
+        raise ValueError("No active AI API key found. Please enter your OpenRouter, Gemini, or Groq API key in the API Settings.")
 
     # Track active LLM engine for this session with fallback support
     active_client = client
@@ -598,15 +781,12 @@ def run_agent(user_request: str, history: list = None) -> str:
             )
         except Exception as err:
             err_str = str(err)
-            # If Gemini encounters an API key or quota issue and Groq is configured, fall back to Groq
-            if active_provider == "Gemini" and GROQ_API_KEY and GROQ_API_KEY.strip():
-                print(f"[Agent Warning] Gemini request failed ({err_str[:80]}). Falling back to Groq...")
-                active_client = OpenAI(
-                    api_key=GROQ_API_KEY,
-                    base_url="https://api.groq.com/openai/v1",
-                )
-                active_model = "openai/gpt-oss-20b"
-                active_provider = "Groq"
+            # If current provider encounters failure, attempt fallback
+            new_client, new_model, new_provider = switch_to_fallback(err_str[:80])
+            if new_client:
+                active_client = new_client
+                active_model = new_model
+                active_provider = new_provider
                 response = active_client.chat.completions.create(
                     model=active_model,
                     messages=messages,
@@ -637,6 +817,8 @@ def run_agent(user_request: str, history: list = None) -> str:
 
             if fname == "calculate":
                 result = calculate(args.get("expression", ""))
+            elif fname in ("run_python_code", "execute_code"):
+                result = run_python_code(args.get("code", ""))
             elif fname in ("read_document", "read_pdf"):
                 result = read_document(
                     args.get("file_path", ""),
