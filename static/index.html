@@ -1035,6 +1035,9 @@
                     <button type="button" class="tab-btn active" id="tabOpenRouter" onclick="switchProviderTab('openrouter')">
                         <span>🌐 OpenRouter</span>
                     </button>
+                    <button type="button" class="tab-btn" id="tabClaude" onclick="switchProviderTab('claude')">
+                        <span>🎭 Anthropic Claude</span>
+                    </button>
                     <button type="button" class="tab-btn" id="tabGemini" onclick="switchProviderTab('gemini')">
                         <span>✨ Google Gemini</span>
                     </button>
@@ -1057,7 +1060,9 @@
                         <label>OpenRouter Model</label>
                         <select id="selectOpenRouterModel" class="form-input" onchange="handleOpenRouterModelChange(this.value)">
                             <option value="openai/gpt-4o-mini" selected>openai/gpt-4o-mini (Recommended & Multimodal)</option>
+                            <option value="anthropic/claude-fable-5.1">anthropic/claude-fable-5.1 (Claude Fable 5.1 via OpenRouter)</option>
                             <option value="anthropic/claude-3.5-haiku">anthropic/claude-3.5-haiku</option>
+                            <option value="anthropic/claude-3.7-sonnet">anthropic/claude-3.7-sonnet</option>
                             <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct</option>
                             <option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option>
                             <option value="deepseek/deepseek-chat">deepseek/deepseek-chat</option>
@@ -1071,6 +1076,34 @@
                     </div>
                     <button class="btn-save-key" id="btnSaveOpenRouter" onclick="saveApiKey('openrouter')">
                         <span>Save & Activate OpenRouter</span>
+                    </button>
+                </div>
+
+                <!-- Claude (Anthropic) Section -->
+                <div id="sectionClaude" class="provider-section" style="display: none;">
+                    <div class="form-group">
+                        <label>Anthropic Claude API Key</label>
+                        <div style="position: relative;">
+                            <input type="password" id="inputClaudeKey" class="form-input" placeholder="Paste your Anthropic key (sk-ant-...)">
+                            <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('inputClaudeKey')">👁️</button>
+                        </div>
+                        <span class="input-hint">Configured key: <strong id="hintClaudeKey">Loading...</strong></span>
+                    </div>
+                    <div class="form-group">
+                        <label>Claude Model</label>
+                        <select id="selectClaudeModel" class="form-input" onchange="handleClaudeModelChange(this.value)">
+                            <option value="claude-fable-5-1" selected>claude-fable-5-1 (Claude Fable 5.1 — Agentic & QC)</option>
+                            <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet-20250219 (Claude 3.7 Sonnet)</option>
+                            <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022 (Claude 3.5 Sonnet)</option>
+                            <option value="claude-3-5-haiku-20241022">claude-3-5-haiku-20241022 (Claude 3.5 Haiku)</option>
+                            <option value="custom">✏️ Enter Custom Model Name...</option>
+                        </select>
+                        <div id="customClaudeModelWrapper" style="display: none; margin-top: 0.5rem;">
+                            <input type="text" id="inputCustomClaudeModel" class="form-input" placeholder="e.g. claude-fable-5-1">
+                        </div>
+                    </div>
+                    <button class="btn-save-key" id="btnSaveClaude" onclick="saveApiKey('claude')">
+                        <span>Save & Activate Claude</span>
                     </button>
                 </div>
 
@@ -1769,24 +1802,38 @@
             }
         }
 
+        function handleClaudeModelChange(val) {
+            const wrapper = document.getElementById('customClaudeModelWrapper');
+            if (wrapper) {
+                wrapper.style.display = val === 'custom' ? 'block' : 'none';
+            }
+        }
+
         function switchProviderTab(provider) {
             const tabOpenRouter = document.getElementById('tabOpenRouter');
+            const tabClaude = document.getElementById('tabClaude');
             const tabGemini = document.getElementById('tabGemini');
             const tabGroq = document.getElementById('tabGroq');
             const secOpenRouter = document.getElementById('sectionOpenRouter');
+            const secClaude = document.getElementById('sectionClaude');
             const secGemini = document.getElementById('sectionGemini');
             const secGroq = document.getElementById('sectionGroq');
             const feedback = document.getElementById('apiKeyFeedback');
             if (feedback) feedback.style.display = 'none';
 
             if (tabOpenRouter) tabOpenRouter.classList.remove('active');
+            if (tabClaude) tabClaude.classList.remove('active');
             if (tabGemini) tabGemini.classList.remove('active');
             if (tabGroq) tabGroq.classList.remove('active');
             if (secOpenRouter) secOpenRouter.style.display = 'none';
+            if (secClaude) secClaude.style.display = 'none';
             if (secGemini) secGemini.style.display = 'none';
             if (secGroq) secGroq.style.display = 'none';
 
-            if (provider === 'openrouter') {
+            if (provider === 'claude') {
+                if (tabClaude) tabClaude.classList.add('active');
+                if (secClaude) secClaude.style.display = 'block';
+            } else if (provider === 'openrouter') {
                 if (tabOpenRouter) tabOpenRouter.classList.add('active');
                 if (secOpenRouter) secOpenRouter.style.display = 'block';
             } else if (provider === 'gemini') {
@@ -1812,7 +1859,9 @@
 
                 const pill = document.getElementById('activeModelPill');
                 if (pill) {
-                    if (data.active_provider === 'OpenRouter') {
+                    if (data.active_provider === 'Claude') {
+                        pill.textContent = '🎭 Claude Active';
+                    } else if (data.active_provider === 'OpenRouter') {
                         pill.textContent = '🌐 OpenRouter Active';
                     } else if (data.active_provider === 'Gemini') {
                         pill.textContent = '✨ Gemini Active';
@@ -1826,7 +1875,9 @@
                 const provBadge = document.getElementById('modalActiveProvider');
                 if (provBadge) {
                     provBadge.textContent = data.active_provider || 'Not Configured';
-                    if (data.active_provider === 'OpenRouter') {
+                    if (data.active_provider === 'Claude') {
+                        provBadge.style.color = '#c084fc';
+                    } else if (data.active_provider === 'OpenRouter') {
                         provBadge.style.color = '#38bdf8';
                     } else if (data.active_provider === 'Gemini') {
                         provBadge.style.color = '#6ee7b7';
@@ -1841,6 +1892,9 @@
                 if (modelBadge) {
                     modelBadge.textContent = data.active_model || 'None';
                 }
+
+                const hintClaude = document.getElementById('hintClaudeKey');
+                if (hintClaude) hintClaude.textContent = data.masked_claude_key || 'Not configured';
 
                 const hintOpenRouter = document.getElementById('hintOpenRouterKey');
                 if (hintOpenRouter) hintOpenRouter.textContent = data.masked_openrouter_key || 'Not configured';
@@ -1859,7 +1913,15 @@
             const feedback = document.getElementById('apiKeyFeedback');
             let keyInput, modelSelect, saveBtn, model;
 
-            if (provider === 'openrouter') {
+            if (provider === 'claude') {
+                keyInput = document.getElementById('inputClaudeKey');
+                modelSelect = document.getElementById('selectClaudeModel');
+                saveBtn = document.getElementById('btnSaveClaude');
+                const customInput = document.getElementById('inputCustomClaudeModel');
+                model = (modelSelect && modelSelect.value === 'custom' && customInput && customInput.value.trim())
+                    ? customInput.value.trim()
+                    : (modelSelect ? modelSelect.value : 'claude-fable-5-1');
+            } else if (provider === 'openrouter') {
                 keyInput = document.getElementById('inputOpenRouterKey');
                 modelSelect = document.getElementById('selectOpenRouterModel');
                 saveBtn = document.getElementById('btnSaveOpenRouter');

@@ -45,8 +45,7 @@ Agentic-folder/
 ├── uploads/              # Storage directory for uploaded PDF documents
 ├── .env                  # Environment variables (GROQ_API_KEY)
 ├── README.md             # Project documentation
-└── my-agent/
-    └── .venv/            # Python Virtual Environment
+└── .venv/                # Python Virtual Environment
 ```
 
 ---
@@ -63,12 +62,8 @@ Agentic-folder/
 
 #### On Windows (PowerShell):
 ```powershell
-# If using existing venv:
+# Activate virtual environment:
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-.\my-agent\.venv\Scripts\Activate.ps1
-
-# Or create a fresh one:
-python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 

@@ -86,7 +86,7 @@ def update_env_file(key_name: str, key_val: str, model_val: str = None, active_p
 
 
 class ApiKeyConfigRequest(BaseModel):
-    provider: str  # "openrouter", "gemini", or "groq"
+    provider: str  # "claude", "openrouter", "gemini", or "groq"
     api_key: str
     model: Optional[str] = None
 
@@ -127,7 +127,11 @@ async def set_api_key(req: ApiKeyConfigRequest):
         raise HTTPException(status_code=400, detail="API key cannot be empty.")
 
     prov = req.provider.strip().lower()
-    if prov == "openrouter":
+    if prov in ("claude", "anthropic"):
+        model = req.model.strip() if req.model and req.model.strip() else "claude-fable-5-1"
+        configure_client(provider="claude", claude_key=key, model=model)
+        update_env_file("CLAUDE_API_KEY", key, model_val=model, active_provider="Claude")
+    elif prov == "openrouter":
         model = req.model.strip() if req.model and req.model.strip() else "openai/gpt-4o-mini"
         configure_client(provider="openrouter", openrouter_key=key, model=model)
         update_env_file("OPENROUTER_API_KEY", key, model_val=model, active_provider="OpenRouter")
@@ -145,7 +149,7 @@ async def set_api_key(req: ApiKeyConfigRequest):
         configure_client(provider="groq", groq_key=key, model=model)
         update_env_file("GROQ_API_KEY", key, model_val=model, active_provider="Groq")
     else:
-        raise HTTPException(status_code=400, detail="Provider must be 'openrouter', 'gemini', or 'groq'.")
+        raise HTTPException(status_code=400, detail="Provider must be 'claude', 'openrouter', 'gemini', or 'groq'.")
 
     return {
         "message": f"Successfully activated {prov.title()} API Key!",
