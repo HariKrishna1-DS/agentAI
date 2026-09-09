@@ -71,7 +71,7 @@ def switch_to_fallback(reason: str = ""):
                     "HTTP-Referer": "http://127.0.0.1:8000",
                     "X-Title": "DocuAgent AI",
                 },
-                timeout=30.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
             ACTIVE_PROVIDER = "OpenRouter"
@@ -82,7 +82,7 @@ def switch_to_fallback(reason: str = ""):
             client = OpenAI(
                 api_key=GEMINI_API_KEY,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=25.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
             ACTIVE_PROVIDER = "Gemini"
@@ -93,7 +93,7 @@ def switch_to_fallback(reason: str = ""):
             client = OpenAI(
                 api_key=GROQ_API_KEY,
                 base_url="https://api.groq.com/openai/v1",
-                timeout=25.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
             ACTIVE_PROVIDER = "Groq"
@@ -120,7 +120,7 @@ def switch_to_fallback(reason: str = ""):
             client = OpenAI(
                 api_key=GEMINI_API_KEY,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=25.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
             ACTIVE_PROVIDER = "Gemini"
@@ -131,7 +131,7 @@ def switch_to_fallback(reason: str = ""):
             client = OpenAI(
                 api_key=GROQ_API_KEY,
                 base_url="https://api.groq.com/openai/v1",
-                timeout=25.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
             ACTIVE_PROVIDER = "Groq"
@@ -159,7 +159,7 @@ def switch_to_fallback(reason: str = ""):
             client = OpenAI(
                 api_key=GROQ_API_KEY,
                 base_url="https://api.groq.com/openai/v1",
-                timeout=25.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
             ACTIVE_PROVIDER = "Groq"
@@ -190,7 +190,7 @@ def switch_to_fallback(reason: str = ""):
                     "HTTP-Referer": "http://127.0.0.1:8000",
                     "X-Title": "DocuAgent AI",
                 },
-                timeout=30.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
             ACTIVE_PROVIDER = "OpenRouter"
@@ -201,7 +201,7 @@ def switch_to_fallback(reason: str = ""):
             client = OpenAI(
                 api_key=GEMINI_API_KEY,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=25.0,
+                timeout=90.0,
             )
             MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
             ACTIVE_PROVIDER = "Gemini"
@@ -278,7 +278,7 @@ def configure_client(
                 "HTTP-Referer": "http://127.0.0.1:8000",
                 "X-Title": "DocuAgent AI",
             },
-            timeout=30.0,
+            timeout=90.0,
         )
         anthropic_client = None
         ACTIVE_PROVIDER = "OpenRouter"
@@ -291,7 +291,7 @@ def configure_client(
         client = OpenAI(
             api_key=GROQ_API_KEY,
             base_url="https://api.groq.com/openai/v1",
-            timeout=25.0,
+            timeout=90.0,
         )
         anthropic_client = None
         ACTIVE_PROVIDER = "Groq"
@@ -304,7 +304,7 @@ def configure_client(
         client = OpenAI(
             api_key=GEMINI_API_KEY,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            timeout=25.0,
+            timeout=90.0,
         )
         anthropic_client = None
         ACTIVE_PROVIDER = "Gemini"
@@ -341,7 +341,7 @@ def configure_client(
                 "HTTP-Referer": "http://127.0.0.1:8000",
                 "X-Title": "DocuAgent AI",
             },
-            timeout=30.0,
+            timeout=90.0,
         )
         anthropic_client = None
         ACTIVE_PROVIDER = "OpenRouter"
@@ -352,7 +352,7 @@ def configure_client(
         client = OpenAI(
             api_key=GEMINI_API_KEY,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            timeout=25.0,
+            timeout=90.0,
         )
         anthropic_client = None
         ACTIVE_PROVIDER = "Gemini"
@@ -363,7 +363,7 @@ def configure_client(
         client = OpenAI(
             api_key=GROQ_API_KEY,
             base_url="https://api.groq.com/openai/v1",
-            timeout=25.0,
+            timeout=90.0,
         )
         anthropic_client = None
         ACTIVE_PROVIDER = "Groq"
