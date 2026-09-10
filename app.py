@@ -51,7 +51,7 @@ def get_file_type(filename: str) -> str:
 
 
 def update_env_file(key_name: str, key_val: str, model_val: str = None, active_provider: str = None):
-    """Safely updates or appends keys in the .env file."""
+    """Safely updates or appends keys in the .env file and keeps os.environ synchronized."""
     env_path = ".env"
     lines = []
     found_key = False
@@ -59,6 +59,13 @@ def update_env_file(key_name: str, key_val: str, model_val: str = None, active_p
     model_key_name = f"{prefix}_MODEL"
     found_model = False
     found_provider = False
+
+    # Keep runtime process environment synchronized
+    os.environ[key_name] = key_val
+    if model_val:
+        os.environ[model_key_name] = model_val
+    if active_provider:
+        os.environ["ACTIVE_PROVIDER"] = active_provider
 
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
@@ -92,7 +99,7 @@ def update_env_file(key_name: str, key_val: str, model_val: str = None, active_p
 
 class ApiKeyConfigRequest(BaseModel):
     provider: str  # "claude", "openrouter", "gemini", or "groq"
-    api_key: str
+    api_key: Optional[str] = ""
     model: Optional[str] = None
 
 
@@ -127,17 +134,38 @@ async def api_key_status():
 @app.post("/set-api-key")
 async def set_api_key(req: ApiKeyConfigRequest):
     """Updates the active API key and model from the web UI and writes to .env."""
-    key = req.api_key.strip()
-    if not key:
-        raise HTTPException(status_code=400, detail="API key cannot be empty.")
-
+    key = req.api_key.strip() if req.api_key else ""
     prov = req.provider.strip().lower()
-    if prov in ("claude", "anthropic"):
-        model = req.model.strip() if req.model and req.model.strip() else "claude-fable-5-1"
+
+    # If key was left blank, check if a saved key exists for this provider
+    if not key:
+        env_keys = {
+            "openai": os.environ.get("OPENAI_API_KEY"),
+            "claude": os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"),
+            "anthropic": os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"),
+            "openrouter": os.environ.get("OPENROUTER_API_KEY"),
+            "gemini": os.environ.get("GEMINI_API_KEY"),
+            "groq": os.environ.get("GROQ_API_KEY"),
+        }
+        saved_key = env_keys.get(prov)
+        if saved_key and saved_key.strip() and saved_key != "your_gemini_api_key_here":
+            key = saved_key.strip()
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No API key available for {prov.title()}. Please enter a valid API key."
+            )
+
+    if prov == "openai":
+        model = req.model.strip() if req.model and req.model.strip() else os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        configure_client(provider="openai", openai_key=key, model=model)
+        update_env_file("OPENAI_API_KEY", key, model_val=model, active_provider="OpenAI")
+    elif prov in ("claude", "anthropic"):
+        model = req.model.strip() if req.model and req.model.strip() else os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
         configure_client(provider="claude", claude_key=key, model=model)
         update_env_file("CLAUDE_API_KEY", key, model_val=model, active_provider="Claude")
     elif prov == "openrouter":
-        model = req.model.strip() if req.model and req.model.strip() else "openai/gpt-4o-mini"
+        model = req.model.strip() if req.model and req.model.strip() else os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
         configure_client(provider="openrouter", openrouter_key=key, model=model)
         update_env_file("OPENROUTER_API_KEY", key, model_val=model, active_provider="OpenRouter")
     elif prov == "gemini":
@@ -146,18 +174,18 @@ async def set_api_key(req: ApiKeyConfigRequest):
                 status_code=400,
                 detail="'gen-lang-client-...' is a Google Cloud project name, not an API key. Your Gemini API key starts with 'AIzaSy...' or 'AQ.'."
             )
-        model = req.model.strip() if req.model and req.model.strip() else "gemini-3.6-flash"
+        model = req.model.strip() if req.model and req.model.strip() else os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
         configure_client(provider="gemini", gemini_key=key, model=model)
         update_env_file("GEMINI_API_KEY", key, model_val=model, active_provider="Gemini")
     elif prov == "groq":
-        model = req.model.strip() if req.model and req.model.strip() else "openai/gpt-oss-20b"
+        model = req.model.strip() if req.model and req.model.strip() else os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
         configure_client(provider="groq", groq_key=key, model=model)
         update_env_file("GROQ_API_KEY", key, model_val=model, active_provider="Groq")
     else:
-        raise HTTPException(status_code=400, detail="Provider must be 'claude', 'openrouter', 'gemini', or 'groq'.")
+        raise HTTPException(status_code=400, detail="Provider must be 'openai', 'claude', 'openrouter', 'gemini', or 'groq'.")
 
     return {
-        "message": f"Successfully activated {prov.title()} API Key!",
+        "message": f"Successfully activated {prov.title()} AI Provider!",
         "status": get_client_status(),
     }
 

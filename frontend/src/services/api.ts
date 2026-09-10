@@ -2,6 +2,7 @@ export interface ApiKeyStatus {
   active_provider: string;
   active_model: string;
   keys: {
+    openai: boolean;
     claude: boolean;
     openrouter: boolean;
     gemini: boolean;

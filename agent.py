@@ -31,6 +31,7 @@ client = None
 anthropic_client = None
 MODEL_NAME = "None"
 ACTIVE_PROVIDER = "None"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -42,7 +43,7 @@ def is_likely_api_key(val: str) -> bool:
     if not val:
         return False
     v = val.strip()
-    return v.startswith(("AQ.", "AIza", "gsk_", "sk-or-v1-", "sk-ant-", "sk-")) or len(v) > 35
+    return v.startswith(("AQ.", "AIza", "gsk_", "sk-or-v1-", "sk-ant-", "sk-proj-", "sk-")) or len(v) > 35
 
 
 def is_valid_gemini_key(val: str) -> bool:
@@ -56,162 +57,12 @@ def is_valid_gemini_key(val: str) -> bool:
 
 
 def switch_to_fallback(reason: str = ""):
-    """Switches active provider to an alternate configured provider when the current one fails."""
-    global client, anthropic_client, MODEL_NAME, ACTIVE_PROVIDER, GEMINI_QUOTA_EXHAUSTED
-    current = ACTIVE_PROVIDER
-
-    # If Claude failed
-    if current == "Claude":
-        if OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
-            print(f"[Agent Provider Switch] Claude failed ({reason}). Falling back to OpenRouter.")
-            client = OpenAI(
-                api_key=OPENROUTER_API_KEY,
-                base_url="https://openrouter.ai/api/v1",
-                default_headers={
-                    "HTTP-Referer": "http://127.0.0.1:8000",
-                    "X-Title": "DocuAgent AI",
-                },
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-            ACTIVE_PROVIDER = "OpenRouter"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-        elif is_valid_gemini_key(GEMINI_API_KEY) and not GEMINI_QUOTA_EXHAUSTED:
-            print(f"[Agent Provider Switch] Claude failed ({reason}). Falling back to Gemini.")
-            client = OpenAI(
-                api_key=GEMINI_API_KEY,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-            ACTIVE_PROVIDER = "Gemini"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-        elif GROQ_API_KEY and GROQ_API_KEY.strip():
-            print(f"[Agent Provider Switch] Claude failed ({reason}). Falling back to Groq.")
-            client = OpenAI(
-                api_key=GROQ_API_KEY,
-                base_url="https://api.groq.com/openai/v1",
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-            ACTIVE_PROVIDER = "Groq"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-
-    # If OpenRouter failed (e.g. 402 Insufficient credits)
-    elif current == "OpenRouter":
-        if CLAUDE_API_KEY and CLAUDE_API_KEY.strip():
-            print(f"[Agent Provider Switch] OpenRouter failed ({reason}). Falling back to Claude.")
-            MODEL_NAME = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
-            ACTIVE_PROVIDER = "Claude"
-            if CLAUDE_API_KEY.startswith("xpl_"):
-                base_url = os.environ.get("CLAUDE_BASE_URL", "https://api.experientiallabs.ai/v1")
-                client = OpenAI(api_key=CLAUDE_API_KEY, base_url=base_url, timeout=35.0)
-                anthropic_client = None
-                return client, MODEL_NAME, ACTIVE_PROVIDER
-            elif HAS_ANTHROPIC:
-                anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
-                client = None
-                return anthropic_client, MODEL_NAME, ACTIVE_PROVIDER
-        elif is_valid_gemini_key(GEMINI_API_KEY) and not GEMINI_QUOTA_EXHAUSTED:
-            print(f"[Agent Provider Switch] OpenRouter failed ({reason}). Falling back to Gemini.")
-            client = OpenAI(
-                api_key=GEMINI_API_KEY,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-            ACTIVE_PROVIDER = "Gemini"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-        elif GROQ_API_KEY and GROQ_API_KEY.strip():
-            print(f"[Agent Provider Switch] OpenRouter failed ({reason}). Falling back to Groq.")
-            client = OpenAI(
-                api_key=GROQ_API_KEY,
-                base_url="https://api.groq.com/openai/v1",
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-            ACTIVE_PROVIDER = "Groq"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-
-    # If Gemini failed (quota exceeded)
-    elif current == "Gemini":
-        GEMINI_QUOTA_EXHAUSTED = True
-        if CLAUDE_API_KEY and CLAUDE_API_KEY.strip():
-            print(f"[Agent Provider Switch] Gemini failed ({reason}). Falling back to Claude.")
-            MODEL_NAME = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
-            ACTIVE_PROVIDER = "Claude"
-            if CLAUDE_API_KEY.startswith("xpl_"):
-                base_url = os.environ.get("CLAUDE_BASE_URL", "https://api.experientiallabs.ai/v1")
-                client = OpenAI(api_key=CLAUDE_API_KEY, base_url=base_url, timeout=35.0)
-                anthropic_client = None
-                return client, MODEL_NAME, ACTIVE_PROVIDER
-            elif HAS_ANTHROPIC:
-                anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
-                client = None
-                return anthropic_client, MODEL_NAME, ACTIVE_PROVIDER
-        elif GROQ_API_KEY and GROQ_API_KEY.strip():
-            print(f"[Agent Provider Switch] Gemini failed ({reason}). Falling back to Groq.")
-            client = OpenAI(
-                api_key=GROQ_API_KEY,
-                base_url="https://api.groq.com/openai/v1",
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-            ACTIVE_PROVIDER = "Groq"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-
-    # If Groq failed
-    elif current == "Groq":
-        if CLAUDE_API_KEY and CLAUDE_API_KEY.strip():
-            print(f"[Agent Provider Switch] Groq failed ({reason}). Falling back to Claude.")
-            MODEL_NAME = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
-            ACTIVE_PROVIDER = "Claude"
-            if CLAUDE_API_KEY.startswith("xpl_"):
-                base_url = os.environ.get("CLAUDE_BASE_URL", "https://api.experientiallabs.ai/v1")
-                client = OpenAI(api_key=CLAUDE_API_KEY, base_url=base_url, timeout=35.0)
-                anthropic_client = None
-                return client, MODEL_NAME, ACTIVE_PROVIDER
-            elif HAS_ANTHROPIC:
-                anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
-                client = None
-                return anthropic_client, MODEL_NAME, ACTIVE_PROVIDER
-        elif OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
-            print(f"[Agent Provider Switch] Groq failed ({reason}). Falling back to OpenRouter.")
-            client = OpenAI(
-                api_key=OPENROUTER_API_KEY,
-                base_url="https://openrouter.ai/api/v1",
-                default_headers={
-                    "HTTP-Referer": "http://127.0.0.1:8000",
-                    "X-Title": "DocuAgent AI",
-                },
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-            ACTIVE_PROVIDER = "OpenRouter"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-        elif is_valid_gemini_key(GEMINI_API_KEY) and not GEMINI_QUOTA_EXHAUSTED:
-            print(f"[Agent Provider Switch] Groq failed ({reason}). Falling back to Gemini.")
-            client = OpenAI(
-                api_key=GEMINI_API_KEY,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=90.0,
-            )
-            MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-            ACTIVE_PROVIDER = "Gemini"
-            anthropic_client = None
-            return client, MODEL_NAME, ACTIVE_PROVIDER
-
+    """Do not automatically switch to another provider or default key."""
     return None, None, None
 
 
 def configure_client(
+    openai_key: str = None,
     gemini_key: str = None,
     groq_key: str = None,
     openrouter_key: str = None,
@@ -219,8 +70,13 @@ def configure_client(
     model: str = None,
     provider: str = None,
 ):
-    """Dynamically configures or switches the active LLM client among OpenRouter, Claude, Gemini, and Groq."""
-    global client, anthropic_client, MODEL_NAME, ACTIVE_PROVIDER, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, CLAUDE_API_KEY, GEMINI_QUOTA_EXHAUSTED
+    """Configures the active LLM client. If no key is available for the provider, does not pick any default key."""
+    global client, anthropic_client, MODEL_NAME, ACTIVE_PROVIDER
+    global OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, CLAUDE_API_KEY, GEMINI_QUOTA_EXHAUSTED
+
+    if openai_key is not None:
+        OPENAI_API_KEY = openai_key.strip()
+        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
     if gemini_key is not None:
         GEMINI_API_KEY = gemini_key.strip()
@@ -245,142 +101,130 @@ def configure_client(
     # Sanitize model name: ensure an API key wasn't accidentally passed as model
     chosen_model = model if (model and not is_likely_api_key(model)) else None
 
-    # Priority 1: Explicit target provider selection
-    if target_prov in ("claude", "anthropic") and CLAUDE_API_KEY and CLAUDE_API_KEY.strip():
-        saved_model = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
-        MODEL_NAME = chosen_model or saved_model
-        if CLAUDE_API_KEY.startswith("xpl_"):
-            base_url = os.environ.get("CLAUDE_BASE_URL", "https://api.experientiallabs.ai/v1")
+    # Strictly activate the chosen provider only if it has a valid API key.
+    # If key is NOT available, DO NOT take any default key!
+    if target_prov == "openai":
+        if OPENAI_API_KEY and OPENAI_API_KEY.strip():
+            saved_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+            MODEL_NAME = chosen_model or saved_model
+            os.environ["OPENAI_MODEL"] = MODEL_NAME
             client = OpenAI(
-                api_key=CLAUDE_API_KEY,
-                base_url=base_url,
-                timeout=35.0,
+                api_key=OPENAI_API_KEY,
+                timeout=90.0,
             )
             anthropic_client = None
-            ACTIVE_PROVIDER = "Claude"
-            os.environ["ACTIVE_PROVIDER"] = "Claude"
+            ACTIVE_PROVIDER = "OpenAI"
+            os.environ["ACTIVE_PROVIDER"] = "OpenAI"
             return
         else:
-            if HAS_ANTHROPIC:
-                anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
             client = None
-            ACTIVE_PROVIDER = "Claude"
-            os.environ["ACTIVE_PROVIDER"] = "Claude"
+            anthropic_client = None
+            ACTIVE_PROVIDER = "None"
+            MODEL_NAME = "None"
             return
 
-    if target_prov == "openrouter" and OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
-        saved_model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-        MODEL_NAME = chosen_model or saved_model
-        client = OpenAI(
-            api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1",
-            default_headers={
-                "HTTP-Referer": "http://127.0.0.1:8000",
-                "X-Title": "DocuAgent AI",
-            },
-            timeout=90.0,
-        )
-        anthropic_client = None
-        ACTIVE_PROVIDER = "OpenRouter"
-        os.environ["ACTIVE_PROVIDER"] = "OpenRouter"
-        return
+    if target_prov in ("claude", "anthropic"):
+        if CLAUDE_API_KEY and CLAUDE_API_KEY.strip():
+            saved_model = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
+            MODEL_NAME = chosen_model or saved_model
+            os.environ["CLAUDE_MODEL"] = MODEL_NAME
+            if CLAUDE_API_KEY.startswith("xpl_"):
+                base_url = os.environ.get("CLAUDE_BASE_URL", "https://api.experientiallabs.ai/v1")
+                client = OpenAI(
+                    api_key=CLAUDE_API_KEY,
+                    base_url=base_url,
+                    timeout=35.0,
+                )
+                anthropic_client = None
+                ACTIVE_PROVIDER = "Claude"
+                os.environ["ACTIVE_PROVIDER"] = "Claude"
+                return
+            else:
+                if HAS_ANTHROPIC:
+                    anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
+                client = None
+                ACTIVE_PROVIDER = "Claude"
+                os.environ["ACTIVE_PROVIDER"] = "Claude"
+                return
+        else:
+            client = None
+            anthropic_client = None
+            ACTIVE_PROVIDER = "None"
+            MODEL_NAME = "None"
+            return
 
-    if target_prov == "groq" and GROQ_API_KEY and GROQ_API_KEY.strip():
-        saved_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-        MODEL_NAME = chosen_model or saved_model
-        client = OpenAI(
-            api_key=GROQ_API_KEY,
-            base_url="https://api.groq.com/openai/v1",
-            timeout=90.0,
-        )
-        anthropic_client = None
-        ACTIVE_PROVIDER = "Groq"
-        os.environ["ACTIVE_PROVIDER"] = "Groq"
-        return
-
-    if target_prov == "gemini" and not GEMINI_QUOTA_EXHAUSTED and is_valid_gemini_key(GEMINI_API_KEY):
-        saved_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-        MODEL_NAME = chosen_model or saved_model
-        client = OpenAI(
-            api_key=GEMINI_API_KEY,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            timeout=90.0,
-        )
-        anthropic_client = None
-        ACTIVE_PROVIDER = "Gemini"
-        os.environ["ACTIVE_PROVIDER"] = "Gemini"
-        return
-
-    # Priority 2: Auto-detect available keys
-    if CLAUDE_API_KEY and CLAUDE_API_KEY.strip() and target_prov in ("claude", "anthropic"):
-        saved_model = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
-        MODEL_NAME = chosen_model or saved_model
-        if CLAUDE_API_KEY.startswith("xpl_"):
-            base_url = os.environ.get("CLAUDE_BASE_URL", "https://api.experientiallabs.ai/v1")
+    if target_prov == "openrouter":
+        if OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
+            saved_model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+            MODEL_NAME = chosen_model or saved_model
+            os.environ["OPENROUTER_MODEL"] = MODEL_NAME
             client = OpenAI(
-                api_key=CLAUDE_API_KEY,
-                base_url=base_url,
-                timeout=35.0,
+                api_key=OPENROUTER_API_KEY,
+                base_url="https://openrouter.ai/api/v1",
+                default_headers={
+                    "HTTP-Referer": "http://127.0.0.1:8000",
+                    "X-Title": "DocuAgent AI",
+                },
+                timeout=90.0,
             )
             anthropic_client = None
-            ACTIVE_PROVIDER = "Claude"
-            os.environ["ACTIVE_PROVIDER"] = "Claude"
+            ACTIVE_PROVIDER = "OpenRouter"
+            os.environ["ACTIVE_PROVIDER"] = "OpenRouter"
+            return
         else:
-            if HAS_ANTHROPIC:
-                anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
             client = None
-            ACTIVE_PROVIDER = "Claude"
-            os.environ["ACTIVE_PROVIDER"] = "Claude"
-    elif OPENROUTER_API_KEY and OPENROUTER_API_KEY.strip():
-        saved_model = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-        MODEL_NAME = chosen_model or saved_model
-        client = OpenAI(
-            api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1",
-            default_headers={
-                "HTTP-Referer": "http://127.0.0.1:8000",
-                "X-Title": "DocuAgent AI",
-            },
-            timeout=90.0,
-        )
-        anthropic_client = None
-        ACTIVE_PROVIDER = "OpenRouter"
-        os.environ["ACTIVE_PROVIDER"] = "OpenRouter"
-    elif not GEMINI_QUOTA_EXHAUSTED and is_valid_gemini_key(GEMINI_API_KEY):
-        saved_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-        MODEL_NAME = chosen_model or saved_model
-        client = OpenAI(
-            api_key=GEMINI_API_KEY,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            timeout=90.0,
-        )
-        anthropic_client = None
-        ACTIVE_PROVIDER = "Gemini"
-        os.environ["ACTIVE_PROVIDER"] = "Gemini"
-    elif GROQ_API_KEY and GROQ_API_KEY.strip():
-        saved_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-        MODEL_NAME = chosen_model or saved_model
-        client = OpenAI(
-            api_key=GROQ_API_KEY,
-            base_url="https://api.groq.com/openai/v1",
-            timeout=90.0,
-        )
-        anthropic_client = None
-        ACTIVE_PROVIDER = "Groq"
-        os.environ["ACTIVE_PROVIDER"] = "Groq"
-    elif CLAUDE_API_KEY and CLAUDE_API_KEY.strip():
-        saved_model = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
-        MODEL_NAME = chosen_model or saved_model
-        if HAS_ANTHROPIC:
-            anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=30.0)
-        client = None
-        ACTIVE_PROVIDER = "Claude"
-        os.environ["ACTIVE_PROVIDER"] = "Claude"
-    else:
-        client = None
-        anthropic_client = None
-        ACTIVE_PROVIDER = "None"
-        MODEL_NAME = "None"
+            anthropic_client = None
+            ACTIVE_PROVIDER = "None"
+            MODEL_NAME = "None"
+            return
+
+    if target_prov == "groq":
+        if GROQ_API_KEY and GROQ_API_KEY.strip():
+            saved_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+            MODEL_NAME = chosen_model or saved_model
+            os.environ["GROQ_MODEL"] = MODEL_NAME
+            client = OpenAI(
+                api_key=GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1",
+                timeout=90.0,
+            )
+            anthropic_client = None
+            ACTIVE_PROVIDER = "Groq"
+            os.environ["ACTIVE_PROVIDER"] = "Groq"
+            return
+        else:
+            client = None
+            anthropic_client = None
+            ACTIVE_PROVIDER = "None"
+            MODEL_NAME = "None"
+            return
+
+    if target_prov == "gemini":
+        if not GEMINI_QUOTA_EXHAUSTED and is_valid_gemini_key(GEMINI_API_KEY):
+            saved_model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+            MODEL_NAME = chosen_model or saved_model
+            os.environ["GEMINI_MODEL"] = MODEL_NAME
+            client = OpenAI(
+                api_key=GEMINI_API_KEY,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                timeout=90.0,
+            )
+            anthropic_client = None
+            ACTIVE_PROVIDER = "Gemini"
+            os.environ["ACTIVE_PROVIDER"] = "Gemini"
+            return
+        else:
+            client = None
+            anthropic_client = None
+            ACTIVE_PROVIDER = "None"
+            MODEL_NAME = "None"
+            return
+
+    # No valid key available - DO NOT take any default key!
+    client = None
+    anthropic_client = None
+    ACTIVE_PROVIDER = "None"
+    MODEL_NAME = "None"
 
 
 def get_client_status():
@@ -395,10 +239,19 @@ def get_client_status():
         "active_provider": ACTIVE_PROVIDER,
         "active_model": MODEL_NAME,
         "is_active": (client is not None or (ACTIVE_PROVIDER == "Claude" and anthropic_client is not None)),
+        "keys": {
+            "openai": bool(OPENAI_API_KEY),
+            "claude": bool(CLAUDE_API_KEY),
+            "openrouter": bool(OPENROUTER_API_KEY),
+            "gemini": bool(GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here"),
+            "groq": bool(GROQ_API_KEY),
+        },
+        "openai_configured": bool(OPENAI_API_KEY),
         "gemini_configured": bool(GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here"),
         "groq_configured": bool(GROQ_API_KEY),
         "openrouter_configured": bool(OPENROUTER_API_KEY),
         "claude_configured": bool(CLAUDE_API_KEY),
+        "masked_openai_key": mask_key(OPENAI_API_KEY),
         "masked_gemini_key": mask_key(GEMINI_API_KEY),
         "masked_groq_key": mask_key(GROQ_API_KEY),
         "masked_openrouter_key": mask_key(OPENROUTER_API_KEY),
@@ -1086,7 +939,7 @@ def run_agent(user_request: str, history: list = None) -> str:
     )
 
     if client is None and not (ACTIVE_PROVIDER == "Claude" and anthropic_client is not None):
-        raise ValueError("No active AI API key found. Please enter your OpenRouter, Claude, Gemini, or Groq API key in the API Settings.")
+        raise ValueError("No active AI API key found. Please configure your OpenAI, Gemini, Groq, OpenRouter, or Claude API key in AI Provider Settings.")
 
     # Track active LLM engine for this session with fallback support
     active_client = client

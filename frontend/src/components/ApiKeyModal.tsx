@@ -16,18 +16,18 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   status,
   onStatusUpdated,
 }) => {
-  const [provider, setProvider] = useState<string>('groq');
+  const [provider, setProvider] = useState<string>('openai');
   const [apiKey, setApiKeyInput] = useState<string>('');
   const [model, setModel] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  const isKeyConfigured = Boolean(status?.keys?.[provider as keyof typeof status.keys]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apiKey.trim()) {
+    if (!apiKey.trim() && !isKeyConfigured) {
       setError('Please enter a valid API key.');
       return;
     }
@@ -54,11 +54,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   };
 
   const providers = [
+    { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', desc: 'GPT-4o, GPT-4o-mini, o1 models' },
     { id: 'groq', name: 'Groq API', defaultModel: 'openai/gpt-oss-20b', desc: 'Ultra-fast inference (Free Tier available)' },
-    { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-3.6-flash', desc: 'Gemini Flash & Pro models' },
+    { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-3.8-flash', desc: 'Gemini Flash & Pro models' },
     { id: 'openrouter', name: 'OpenRouter', defaultModel: 'openai/gpt-4o-mini', desc: 'Unified access to Claude, GPT-4o, Llama 3' },
     { id: 'claude', name: 'Anthropic Claude', defaultModel: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet & Haiku' },
   ];
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
@@ -133,7 +136,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 >
                   <div className="text-xs font-semibold text-gray-200 flex items-center justify-between">
                     {p.name}
-                    {status?.keys[p.id as keyof typeof status.keys] && (
+                    {status?.keys?.[p.id as keyof typeof status.keys] && (
                       <span className="w-2 h-2 rounded-full bg-emerald-400" title="Key Configured"></span>
                     )}
                   </div>
@@ -145,14 +148,23 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
           <div>
             <label className="block mb-1 text-xs font-medium text-gray-300">
-              API Key <span className="text-rose-400">*</span>
+              API Key {!isKeyConfigured && <span className="text-rose-400">*</span>}
+              {isKeyConfigured && (
+                <span className="text-emerald-400 text-[10px] ml-1.5 font-normal">
+                  (Key already saved • Leave blank to keep existing key)
+                </span>
+              )}
             </label>
             <input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder={`Enter your ${provider.toUpperCase()} API key...`}
-              className="w-full px-3 py-2 text-xs text-white bg-gray-950 border border-gray-800 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-600 font-mono"
+              placeholder={
+                isKeyConfigured
+                  ? `•••••••••••••••• (Saved. Enter new key to change)`
+                  : `Enter your ${provider.toUpperCase()} API key...`
+              }
+              className="w-full px-3 py-2 text-xs text-white bg-gray-950 border border-gray-800 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500 font-mono"
             />
           </div>
 
@@ -193,7 +205,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Activate Key</span>
+                  <span>{isKeyConfigured && !apiKey.trim() ? 'Switch Provider' : 'Activate Key'}</span>
                 </>
               )}
             </button>
