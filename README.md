@@ -38,12 +38,20 @@ DocuAgent allows you to chat with a general AI assistant, upload multiple PDF do
 
 ```
 Agentic-folder/
-├── agent.py              # Core Groq LLM Agent with tool-calling capabilities
-├── app.py                # FastAPI REST API, routing, and file management
-├── static/
-│   └── index.html        # Interactive Web UI (Single Page Application)
-├── uploads/              # Storage directory for uploaded PDF documents
-├── .env                  # Environment variables (GROQ_API_KEY)
+├── agent.py              # Core LLM Agent with multi-provider tool-calling capabilities
+├── app.py                # FastAPI REST API, routing, static serving, and file management
+├── frontend/             # Modern React + TypeScript + Tailwind CSS Frontend Application
+│   ├── src/
+│   │   ├── components/   # Sidebar, ChatArea, ApiKeyModal, DocumentPreviewModal, CodeSandboxModal
+│   │   ├── services/     # API client service (FastAPI integration)
+│   │   ├── App.tsx       # Main React application workspace
+│   │   └── main.tsx      # React entrypoint
+│   ├── dist/             # Production build served directly by FastAPI at http://127.0.0.1:8000
+│   ├── vite.config.ts    # Vite dev server and proxy configuration
+│   └── package.json      # Node dependencies (React 19, TypeScript, Tailwind CSS v4, Lucide React)
+├── static/               # Legacy static fallbacks
+├── uploads/              # Storage directory for uploaded PDF, Word, Image & Text documents
+├── .env                  # Environment variables (API Keys: Groq, Gemini, OpenRouter, Claude)
 ├── README.md             # Project documentation
 └── .venv/                # Python Virtual Environment
 ```

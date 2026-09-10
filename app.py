@@ -29,8 +29,13 @@ STATIC_DIR = "static"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
-# Mount static files for marked.js and assets
+# Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+REACT_DIST_DIR = os.path.join("frontend", "dist")
+REACT_ASSETS_DIR = os.path.join(REACT_DIST_DIR, "assets")
+if os.path.exists(REACT_ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=REACT_ASSETS_DIR), name="assets")
 
 
 def get_file_type(filename: str) -> str:
@@ -169,6 +174,10 @@ async def run_code_endpoint(req: RunCodeRequest):
 # --- Web Page Route ---
 @app.get("/", response_class=HTMLResponse)
 async def serve_webpage():
+    react_index = os.path.join(REACT_DIST_DIR, "index.html")
+    if os.path.exists(react_index):
+        with open(react_index, "r", encoding="utf-8") as f:
+            return f.read()
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
         with open(index_path, "r", encoding="utf-8") as f:
