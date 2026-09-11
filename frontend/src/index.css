@@ -167,3 +167,75 @@ html.theme-white,
 .text-theme-muted {
   color: var(--text-muted);
 }
+
+/* Explicit Markdown Table Styling */
+.prose table,
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.85rem 0;
+  font-size: 0.78rem;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.prose thead,
+thead {
+  background-color: var(--prose-th-bg);
+}
+
+.prose th,
+th {
+  background-color: var(--prose-th-bg);
+  color: var(--text-primary);
+  font-weight: 700;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 2px solid var(--border-medium);
+  border-right: 1px solid var(--border-subtle);
+  letter-spacing: 0.02em;
+}
+
+.prose th:last-child,
+th:last-child {
+  border-right: none;
+}
+
+.prose td,
+td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  vertical-align: top;
+}
+
+.prose td:last-child,
+td:last-child {
+  border-right: none;
+}
+
+.prose tr:last-child td,
+tr:last-child td {
+  border-bottom: none;
+}
+
+.prose tbody tr:nth-child(even),
+tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+html.dark .prose tbody tr:nth-child(even),
+[data-theme="night"] tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.prose tbody tr:hover,
+tbody tr:hover {
+  background-color: var(--active-item-bg);
+}
+
