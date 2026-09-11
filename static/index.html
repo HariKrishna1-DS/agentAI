@@ -42,6 +42,91 @@
             --radius-sm: 8px;
         }
 
+        html[data-theme="white"],
+        body.theme-white {
+            --bg-base: #f8fafc;
+            --bg-surface: #ffffff;
+            --bg-card: rgba(255, 255, 255, 0.95);
+            --border-subtle: rgba(0, 0, 0, 0.08);
+            --border-highlight: rgba(99, 102, 241, 0.5);
+            --primary: #4f46e5;
+            --primary-glow: rgba(79, 70, 229, 0.2);
+            --accent: #7c3aed;
+            --accent-glow: rgba(124, 58, 237, 0.2);
+            --text-primary: #0f172a;
+            --text-secondary: #334155;
+            --text-muted: #64748b;
+            --user-bubble: linear-gradient(135deg, #4f46e5, #4338ca);
+            --agent-bubble: #ffffff;
+        }
+
+        html[data-theme="white"] body {
+            background-image: 
+                radial-gradient(at 15% 15%, rgba(99, 102, 241, 0.05) 0px, transparent 45%),
+                radial-gradient(at 85% 85%, rgba(168, 85, 247, 0.04) 0px, transparent 45%);
+        }
+
+        html[data-theme="white"] header {
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+        html[data-theme="white"] .brand-title {
+            background: linear-gradient(135deg, #0f172a, #334155);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        html[data-theme="white"] .chat-panel {
+            background: rgba(248, 250, 252, 0.7);
+        }
+
+        html[data-theme="white"] .chat-header {
+            background: rgba(255, 255, 255, 0.85);
+        }
+
+        html[data-theme="white"] .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        html[data-theme="white"] .modal-card {
+            background: #ffffff;
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        html[data-theme="white"] .modal-header {
+            background: #f8fafc;
+        }
+
+        html[data-theme="white"] .input-wrapper {
+            background: #ffffff;
+        }
+
+        html[data-theme="white"] .input-wrapper .text-input {
+            color: #0f172a;
+        }
+
+        .theme-toggle-btn {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 0.38rem 0.85rem;
+            border-radius: 999px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--border-highlight);
+            background: rgba(99, 102, 241, 0.22);
+            transform: translateY(-1px);
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -991,6 +1076,10 @@
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleStaticTheme()" title="Toggle White and Night mode">
+                <span id="themeToggleIcon">☀️</span>
+                <span id="themeToggleText">White Mode</span>
+            </button>
             <button class="api-settings-btn" id="headerApiKeyBtn" onclick="openApiKeyModal()" title="View and change API keys">
                 <span>🔑</span>
                 <span id="activeModelPill">Gemini Active</span>
@@ -1997,6 +2086,40 @@
                 }
             }
         }
+
+        // Theme White and Night Mode Management
+        function initTheme() {
+            let saved = 'night';
+            try {
+                saved = localStorage.getItem('docuagent_theme') || 'night';
+            } catch (e) {}
+            applyTheme(saved);
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            const icon = document.getElementById('themeToggleIcon');
+            const text = document.getElementById('themeToggleText');
+            if (theme === 'white') {
+                document.body.classList.add('theme-white');
+                if (icon) icon.textContent = '🌙';
+                if (text) text.textContent = 'Night Mode';
+            } else {
+                document.body.classList.remove('theme-white');
+                if (icon) icon.textContent = '☀️';
+                if (text) text.textContent = 'White Mode';
+            }
+            try {
+                localStorage.setItem('docuagent_theme', theme);
+            } catch (e) {}
+        }
+
+        function toggleStaticTheme() {
+            const current = document.documentElement.getAttribute('data-theme') || 'night';
+            applyTheme(current === 'night' ? 'white' : 'night');
+        }
+
+        initTheme();
 
         // Initialize documents and API key status on load
         loadUploadedDocuments();

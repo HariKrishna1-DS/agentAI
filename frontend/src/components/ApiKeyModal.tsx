@@ -64,23 +64,23 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-      <div className="relative w-full max-w-lg overflow-hidden glass-modal rounded-2xl border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-md transition-opacity">
+      <div className="relative w-full max-w-lg overflow-hidden glass-modal rounded-2xl border border-theme-subtle shadow-2xl animate-in fade-in zoom-in duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-theme-subtle header-bg">
           <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30">
+            <div className="p-2 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
               <Key className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-white font-heading">AI Provider Settings</h3>
-              <p className="text-xs text-gray-400">Configure your API Key and active AI LLM model</p>
+              <h3 className="text-base font-semibold text-theme-primary font-heading">AI Provider Settings</h3>
+              <p className="text-xs text-theme-muted">Configure your API Key and active AI LLM model</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1.5 text-theme-muted hover:text-theme-primary rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -88,13 +88,13 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
         {/* Current Active Badge */}
         {status && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-blue-950/40 border border-blue-800/40 flex items-center justify-between">
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between">
             <div className="flex items-center space-x-2 text-xs">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span className="text-gray-300">Active Provider:</span>
-              <span className="font-semibold text-blue-400">{status.active_provider}</span>
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span className="text-theme-secondary">Active Provider:</span>
+              <span className="font-semibold text-blue-600 dark:text-blue-400">{status.active_provider}</span>
             </div>
-            <span className="text-[11px] font-mono bg-blue-900/60 px-2 py-0.5 rounded text-blue-200 border border-blue-700/50">
+            <span className="text-[11px] font-mono bg-blue-600/15 px-2 py-0.5 rounded text-blue-600 dark:text-blue-300 border border-blue-500/30">
               {status.active_model}
             </span>
           </div>
@@ -104,21 +104,21 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           
           {error && (
-            <div className="p-3 text-xs text-rose-300 bg-rose-950/50 border border-rose-800/50 rounded-xl flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <div className="p-3 text-xs text-rose-600 dark:text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {success && (
-            <div className="p-3 text-xs text-emerald-300 bg-emerald-950/50 border border-emerald-800/50 rounded-xl flex items-center space-x-2">
-              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="p-3 text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center space-x-2">
+              <Check className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>{success}</span>
             </div>
           )}
 
           <div>
-            <label className="block mb-2 text-xs font-medium text-gray-300">Select Provider</label>
+            <label className="block mb-2 text-xs font-medium text-theme-secondary">Select Provider</label>
             <div className="grid grid-cols-2 gap-2">
               {providers.map((p) => (
                 <button
@@ -130,27 +130,27 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                   }}
                   className={`p-3 rounded-xl border text-left transition-all ${
                     provider === p.id
-                      ? 'bg-blue-600/20 border-blue-500 text-white shadow-lg shadow-blue-950/50'
-                      : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700 hover:bg-gray-800/50'
+                      ? 'bg-blue-600/15 border-blue-500 text-theme-primary shadow-sm'
+                      : 'card-bg border-theme-subtle text-theme-muted hover:border-blue-500/40 hover:bg-black/5 dark:hover:bg-white/5'
                   }`}
                 >
-                  <div className="text-xs font-semibold text-gray-200 flex items-center justify-between">
+                  <div className="text-xs font-semibold text-theme-primary flex items-center justify-between">
                     {p.name}
                     {status?.keys?.[p.id as keyof typeof status.keys] && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" title="Key Configured"></span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" title="Key Configured"></span>
                     )}
                   </div>
-                  <div className="text-[10px] text-gray-500 mt-1 line-clamp-1">{p.desc}</div>
+                  <div className="text-[10px] text-theme-muted mt-1 line-clamp-1">{p.desc}</div>
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block mb-1 text-xs font-medium text-gray-300">
-              API Key {!isKeyConfigured && <span className="text-rose-400">*</span>}
+            <label className="block mb-1 text-xs font-medium text-theme-secondary">
+              API Key {!isKeyConfigured && <span className="text-rose-500">*</span>}
               {isKeyConfigured && (
-                <span className="text-emerald-400 text-[10px] ml-1.5 font-normal">
+                <span className="text-emerald-500 text-[10px] ml-1.5 font-normal">
                   (Key already saved • Leave blank to keep existing key)
                 </span>
               )}
@@ -164,13 +164,13 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                   ? `•••••••••••••••• (Saved. Enter new key to change)`
                   : `Enter your ${provider.toUpperCase()} API key...`
               }
-              className="w-full px-3 py-2 text-xs text-white bg-gray-950 border border-gray-800 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500 font-mono"
+              className="w-full px-3 py-2 text-xs text-theme-primary input-bg border border-theme-medium rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder:text-theme-muted font-mono"
             />
           </div>
 
           <div>
-            <label className="block mb-1 text-xs font-medium text-gray-300">
-              Custom Model Name <span className="text-gray-500">(Optional)</span>
+            <label className="block mb-1 text-xs font-medium text-theme-secondary">
+              Custom Model Name <span className="text-theme-muted">(Optional)</span>
             </label>
             <div className="relative">
               <input
@@ -178,24 +178,24 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder={`e.g. ${providers.find(p => p.id === provider)?.defaultModel}`}
-                className="w-full px-3 py-2 pl-8 text-xs text-white bg-gray-950 border border-gray-800 rounded-xl focus:outline-none focus:border-blue-500 font-mono"
+                className="w-full px-3 py-2 pl-8 text-xs text-theme-primary input-bg border border-theme-medium rounded-xl focus:outline-none focus:border-blue-500 font-mono"
               />
-              <Cpu className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-2.5" />
+              <Cpu className="w-3.5 h-3.5 text-theme-muted absolute left-2.5 top-2.5" />
             </div>
           </div>
 
-          <div className="pt-3 flex justify-end space-x-2 border-t border-white/10">
+          <div className="pt-3 flex justify-end space-x-2 border-t border-theme-subtle">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-medium text-theme-muted hover:text-theme-primary hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl shadow-lg shadow-blue-600/30 transition-all flex items-center space-x-2"
+              className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl shadow-md shadow-blue-600/30 transition-all flex items-center space-x-2"
             >
               {loading ? (
                 <>

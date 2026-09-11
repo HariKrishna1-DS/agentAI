@@ -4,6 +4,7 @@ import { ChatArea } from './components/ChatArea';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { CodeSandboxModal } from './components/CodeSandboxModal';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import type {
   DocFile,
   ChatMessage,
@@ -18,7 +19,8 @@ import {
   runQCAudit
 } from './services/api';
 
-export function App() {
+function AppContent() {
+  useTheme();
   const [files, setFiles] = useState<DocFile[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeTarget, setActiveTarget] = useState<string>('__all__');
@@ -158,7 +160,7 @@ export function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0b0f19] text-gray-100 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden app-bg text-theme-primary font-sans transition-colors duration-200">
       <Sidebar
         files={files}
         activeTarget={activeTarget}
@@ -201,4 +203,13 @@ export function App() {
   );
 }
 
+export function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
 export default App;
+

@@ -1,12 +1,77 @@
 @import "tailwindcss";
 
+:root {
+  /* Night mode (default) */
+  --app-bg: #0b0f19;
+  --sidebar-bg: rgba(13, 18, 31, 0.94);
+  --header-bg: rgba(13, 18, 31, 0.7);
+  --input-bg: rgba(10, 14, 23, 0.85);
+  --card-bg: rgba(17, 24, 39, 0.75);
+  --card-hover: rgba(31, 41, 55, 0.85);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-medium: rgba(255, 255, 255, 0.16);
+  --border-hover: rgba(59, 130, 246, 0.4);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --glass-panel-bg: rgba(17, 24, 39, 0.7);
+  --glass-panel-border: rgba(255, 255, 255, 0.08);
+  --glass-modal-bg: rgba(13, 18, 30, 0.96);
+  --modal-header-bg: rgba(255, 255, 255, 0.04);
+  --prose-code-bg: #1e293b;
+  --prose-th-bg: #111827;
+  --prose-border: #374151;
+  --assistant-bubble: rgba(17, 24, 39, 0.85);
+  --assistant-text: #e2e8f0;
+  --user-bubble: #2563eb;
+  --active-item-bg: rgba(37, 99, 235, 0.18);
+  --active-item-border: rgba(59, 130, 246, 0.4);
+  --scroll-track: #0d121f;
+  --scroll-thumb: #2a3447;
+  --scroll-thumb-hover: #3b82f6;
+  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.45);
+}
+
+html.theme-white,
+[data-theme="white"] {
+  --app-bg: #f8fafc;
+  --sidebar-bg: rgba(255, 255, 255, 0.96);
+  --header-bg: rgba(255, 255, 255, 0.85);
+  --input-bg: #ffffff;
+  --card-bg: #ffffff;
+  --card-hover: #f1f5f9;
+  --border-subtle: #e2e8f0;
+  --border-medium: #cbd5e1;
+  --border-hover: rgba(37, 99, 235, 0.5);
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --glass-panel-bg: rgba(255, 255, 255, 0.92);
+  --glass-panel-border: #e2e8f0;
+  --glass-modal-bg: rgba(255, 255, 255, 0.98);
+  --modal-header-bg: #f8fafc;
+  --prose-code-bg: #f1f5f9;
+  --prose-th-bg: #e2e8f0;
+  --prose-border: #cbd5e1;
+  --assistant-bubble: #ffffff;
+  --assistant-text: #1e293b;
+  --user-bubble: #2563eb;
+  --active-item-bg: rgba(37, 99, 235, 0.1);
+  --active-item-border: rgba(37, 99, 235, 0.4);
+  --scroll-track: #f1f5f9;
+  --scroll-thumb: #cbd5e1;
+  --scroll-thumb-hover: #94a3b8;
+  --shadow-card: 0 4px 16px -2px rgba(0, 0, 0, 0.08);
+}
+
 @layer base {
   body {
-    background-color: #0b0f19;
-    color: #f3f4f6;
+    background-color: var(--app-bg);
+    color: var(--text-primary);
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
@@ -17,43 +82,88 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d121f;
+  background: var(--scroll-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a3447;
+  background: var(--scroll-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b82f6;
+  background: var(--scroll-thumb-hover);
 }
 
-/* Glassmorphism card styles */
+/* Glassmorphism panel styles */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.7);
+  background: var(--glass-panel-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: var(--shadow-card);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-panel-hover {
   transition: all 0.2s ease-in-out;
 }
 .glass-panel-hover:hover {
-  background: rgba(31, 41, 55, 0.8);
-  border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  background: var(--card-hover);
+  border-color: var(--border-hover);
 }
 
 .glass-modal {
-  background: rgba(13, 18, 30, 0.95);
+  background: var(--glass-modal-bg);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* Dynamic theme helper utility classes */
+.app-bg {
+  background-color: var(--app-bg);
+}
+
+.sidebar-bg {
+  background-color: var(--sidebar-bg);
+}
+
+.header-bg {
+  background-color: var(--header-bg);
+}
+
+.input-bg {
+  background-color: var(--input-bg);
+}
+
+.card-bg {
+  background-color: var(--card-bg);
+}
+
+.border-theme-subtle {
+  border-color: var(--border-subtle);
+}
+
+.border-theme-medium {
+  border-color: var(--border-medium);
+}
+
+.text-theme-primary {
+  color: var(--text-primary);
+}
+
+.text-theme-secondary {
+  color: var(--text-secondary);
+}
+
+.text-theme-muted {
+  color: var(--text-muted);
 }
